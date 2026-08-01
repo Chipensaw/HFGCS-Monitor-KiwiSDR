@@ -91,22 +91,23 @@ different problems with different remedies and both return a score of zero.
    list, so those receivers are unreachable whenever any preference is set.
 4. **Retention does not prune `data/trash`.** It only walks `data/events`.
    Trash grows without bound. Files are safe; the disk is not, eventually.
-5. **`userAgent` is configured but never sent.** The `ws` client does not set a
-   custom header, so a sysop gets the Node default.
-6. **`optOutContact` points at a page behind basic auth.** The people who would
-   need it cannot reach it.
-7. **Live harmonicity reads 0.000 in `/api/status`.** Wired into the per-hop
+5. **No direct contact route is published.** By design: a scrapeable address in
+   a public repo attracts spam, and a sysop who does not want to participate can
+   simply block. Identification is still sent both ways -- `ident_user` in the
+   receiver's user list, and an HTTP `User-Agent` linking to this repository,
+   which has an Issues tab if someone does want to reach the maintainer.
+6. **Live harmonicity reads 0.000 in `/api/status`.** Wired into the per-hop
    callback and the per-event feature vector, but not into `metrics()`.
    Cosmetic -- recorded features are correct.
-8. **The monitor can write `data/`.** The one-writer rule (recorder owns
+7. **The monitor can write `data/`.** The one-writer rule (recorder owns
    `events.jsonl`) is enforced by code, not by the filesystem, since the
    settings/label/delete features needed write access.
-9. **Transmissions fragment across multiple captures.** A speech pause longer
+8. **Transmissions fragment across multiple captures.** A speech pause longer
    than the 3 s hangover closes the event; the next burst starts a new one. One
    94 s transmission was recorded as three files with 6 s and 17 s missing.
    Grouping on display would fix counts and labelling without touching the
    audio.
-10. **Simulcast correlation is designed but not built.** HFGCS transmits the
+9. **Simulcast correlation is designed but not built.** HFGCS transmits the
     same message on several frequencies at once. Grouping them is both dedup
     and a free confidence check: a real event appears on 3+ channels, a false
     positive on one.
@@ -120,12 +121,11 @@ different problems with different remedies and both return a score of zero.
 2. Transcribe the UDXF schedule into `scheduler/stations.json` and compute path
    midpoints.
 3. Retention for `data/trash` -- age and size cap, same as events.
-4. Send the `userAgent`; put a reachable opt-out contact on the page.
-5. Group fragmented captures into single transmissions for display.
-6. Build simulcast correlation on top of that grouping.
-7. Remove or demote the modulation test once voicing has more evidence.
-8. Wire `lastHarmonicity` into `metrics()`.
-9. Coverage reporting on the page -- written to `coverage.jsonl` hourly, nothing
+4. Group fragmented captures into single transmissions for display.
+5. Build simulcast correlation on top of that grouping.
+6. Remove or demote the modulation test once voicing has more evidence.
+7. Wire `lastHarmonicity` into `metrics()`.
+8. Coverage reporting on the page -- written to `coverage.jsonl` hourly, nothing
    displays it.
 
 ---

@@ -150,10 +150,9 @@
     "maxTotalMB": 8192
   },
   "identification": {
-    "_note": "kiwiIdentUser shows in the receiver user list. userAgent is sent as the HTTP header on the WebSocket upgrade. optOutContact must be reachable WITHOUT the page password.",
+    "_note": "kiwiIdentUser shows in the receiver user list. userAgent is sent as the HTTP User-Agent on the WebSocket upgrade and links back to this repository.",
     "userAgent": "HFGCS-Monitor-KiwiSDR/0.1 (+https://github.com/Chipensaw/HFGCS-Monitor-KiwiSDR)",
-    "kiwiIdentUser": "YOURCALL-HFGCS",
-    "optOutContact": "you@example.com"
+    "kiwiIdentUser": "YOURCALL-HFGCS"
   },
   "coverage": {
     "_note": "Rotation and slot contention mean transmissions will be missed. Report the gaps rather than letting the page imply completeness.",

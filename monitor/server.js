@@ -275,7 +275,6 @@ function page() {
   </details>
 
   <div class="footer">
-    <span id="optout"></span>
     <b>Authorisation is a shell act.</b> The recorder cannot start without it, whatever this page says.<br>
     enable&nbsp;&nbsp;<code>sudo -u hfgcs touch /opt/hfgcs/config/ENABLED</code><br>
     disable&nbsp;<code>sudo rm -f /opt/hfgcs/config/ENABLED</code>
@@ -509,19 +508,6 @@ document.getElementById('btrash').onclick=async function(){
 };
 
 let cfgLoaded=false;
-// Surface the opt-out route on the page itself, so it is visible without
-// opening Settings.
-async function showOptOut(){
-  try{
-    const d=await fetch('api/config').then(r=>r.ok?r.json():null);
-    if(!d) return;
-    const f=d.fields.find(x=>x.key==='identification.optOutContact');
-    if(f && f.value) document.getElementById('optout').innerHTML =
-      'Sysop opt-out: <code>'+esc(f.value)+'</code><br>';
-  }catch(e){}
-}
-showOptOut();
-
 async function loadCfg(){
   let d;
   try{ d = await fetch('api/config').then(r=>r.ok?r.json():null); }catch(e){ d=null; }

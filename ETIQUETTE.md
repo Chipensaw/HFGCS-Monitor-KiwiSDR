@@ -23,7 +23,7 @@ without limits is a distributed denial of service against hobbyists.
 | One connect failure retires a receiver for 30 min | No reconnect hammering |
 | `ip_limit` / `too_busy` abandons immediately, no retry | A refusal is an answer |
 | Propagation gate RELEASES the slot when the band is closed | Holding 4724 kHz through local noon consumes a receiver to hear a dead band |
-| `config/blocklist.txt` honoured always | Any sysop who asks is excluded, no flag required |
+| `config/blocklist.txt` honoured always | Exclusions are honoured unconditionally, no flag required |
 | `ident_user` sent on every session | Shows in the receiver's user list |
 | HTTP `User-Agent` sent on every connection | The other place a sysop looks. Names the tool and links to this repo |
 | `config/ENABLED` must be created by hand at a shell | Installing the software is not the same act as authorising it to contact anyone |
@@ -37,16 +37,16 @@ not usable.
 
 ## If you are a sysop
 
-If you would rather not be included, that is entirely reasonable and no
-explanation is needed and no justification required.
+Every connection identifies itself, in the receiver's user list and in the
+HTTP `User-Agent`, and the `User-Agent` links to this repository. If you would
+rather not be included, blocking is entirely reasonable and needs no
+explanation.
 
-**Email:** origin2100@proton.me
-**Or:** open an issue on this repository
-
-Either route gets the endpoint into the shipped blocklist. You can also add it
-to your own `config/blocklist.txt`:
+Operators running this tool maintain their own exclusion list:
 
 ```
+config/blocklist.txt
+
 example.ddns.net:8073      exclude one receiver
 example.ddns.net           exclude every port on that host
 ```
@@ -60,8 +60,8 @@ Two places, both populated:
 | Receiver's user list | your `identification.kiwiIdentUser` |
 | HTTP `User-Agent` on the upgrade | `HFGCS-Monitor-KiwiSDR/0.1 (+https://github.com/Chipensaw/HFGCS-Monitor-KiwiSDR)` |
 
-Both were previously incomplete: the User-Agent was configured but never
-actually sent, and the opt-out contact pointed at a page behind basic auth --
-unreachable by exactly the people who would need it. Both are fixed. They are
-recorded here because a document claiming a tool is considerate, while quietly
-omitting where it was not, is worth less than no document.
+The User-Agent was previously configured but never actually sent, so
+connections carried the Node default and a sysop had no way to identify them.
+That is fixed. It is recorded here because a document claiming a tool is
+considerate, while quietly omitting where it was not, is worth less than no
+document.
