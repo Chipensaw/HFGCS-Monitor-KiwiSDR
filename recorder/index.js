@@ -303,6 +303,12 @@ class ChannelWorker extends EventEmitter {
     try {
       sess = this.sessionFactory(rx, this.freqKHz, {
         identUser: this.cfg.identification.kiwiIdentUser,
+        // Only forward it if set. Object.assign copies undefined, so passing
+        // an absent key here would CLOBBER the client's default rather than
+        // fall back to it -- and an undefined HTTP header then breaks the
+        // WebSocket upgrade outright. Same trap as the detector config.
+        ...(this.cfg.identification.userAgent
+            ? { userAgent: this.cfg.identification.userAgent } : {}),
         mode: this.cfg.mode || 'usb',
         lowCut: this.cfg.receiver.passbandHz[0],
         highCut: this.cfg.receiver.passbandHz[1],

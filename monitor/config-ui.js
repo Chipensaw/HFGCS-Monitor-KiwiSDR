@@ -117,6 +117,12 @@ const SCHEMA = [
     help: 'What a KiwiSDR sysop sees in their connection list.',
     measured: 'Goes on the wire in SET ident_user= and SERVER DE CLIENT <id> SND. Both are SPACE-DELIMITED, so spaces and control characters are rejected -- they would corrupt the protocol.' },
 
+  { group: 'Identification', key: 'identification.optOutContact', type: 'text',
+    maxLength: 120, pattern: '^[A-Za-z0-9._%+@:/?#-]+$',
+    label: 'Opt-out contact',
+    help: 'Where a sysop asks to be excluded. Must be reachable WITHOUT the page password.',
+    measured: 'This previously pointed at /hfgcs/, which is behind basic auth -- the people who would need it could not open it. An unreachable opt-out is worse than none.' },
+
   { group: 'Retention', key: 'retention.retentionDays', type: 'int', min: 1, max: 3650,
     label: 'Keep for (days)' },
   { group: 'Retention', key: 'retention.maxTotalMB', type: 'int', min: 100, max: 102400,

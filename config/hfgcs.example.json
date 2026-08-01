@@ -150,10 +150,10 @@
     "maxTotalMB": 8192
   },
   "identification": {
-    "_note": "Set this to something a sysop can identify you by. It is sent as SET ident_user= and SERVER DE CLIENT <id> SND. No spaces.",
-    "userAgent": "hfgcs-recorder/0.1 (+https://onlineremoteradio.com/hfgcs/)",
+    "_note": "kiwiIdentUser shows in the receiver user list. userAgent is sent as the HTTP header on the WebSocket upgrade. optOutContact must be reachable WITHOUT the page password.",
+    "userAgent": "HFGCS-Monitor-KiwiSDR/0.1 (+https://github.com/Chipensaw/HFGCS-Monitor-KiwiSDR)",
     "kiwiIdentUser": "YOURCALL-HFGCS",
-    "optOutContact": "see /hfgcs/ page"
+    "optOutContact": "you@example.com"
   },
   "coverage": {
     "_note": "Rotation and slot contention mean transmissions will be missed. Report the gaps rather than letting the page imply completeness.",

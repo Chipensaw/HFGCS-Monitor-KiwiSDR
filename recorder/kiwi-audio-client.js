@@ -52,6 +52,15 @@ const AGC_DECAY_MS_MIN = 1000;
 
 const DEFAULTS = {
   identUser: 'hfgcs-recorder',
+  // Sent as the HTTP User-Agent on the WebSocket upgrade. The receiver's user
+  // list shows identUser; this is the other place a sysop might look, and it
+  // was configured but never actually sent -- the ws client does not set a
+  // custom header unless told to, so connections carried the Node default.
+  //
+  // The +URL is the important part: it is public, needs no password, explains
+  // what the tool does, and has an Issues tab. That one link is both the
+  // "what is this" answer and a reachable opt-out route.
+  userAgent: 'HFGCS-Monitor-KiwiSDR/0.1 (+https://github.com/Chipensaw/HFGCS-Monitor-KiwiSDR)',
   mode: 'usb',
   lowCut: 300,
   highCut: 2700,
@@ -185,6 +194,17 @@ class KiwiAudioSession extends EventEmitter {
     return this.rx.host + ':' + this.rx.port;
   }
 
+  /**
+   * WebSocket options, shared by both sockets.
+   * An undefined header value breaks the upgrade, so it is omitted entirely
+   * rather than sent empty.
+   */
+  _wsOpts() {
+    const o = { handshakeTimeout: this.opts.connectTimeoutMs };
+    if (this.opts.userAgent) o.headers = { 'User-Agent': this.opts.userAgent };
+    return o;
+  }
+
   // -- socket send guards ----------------------------------------------------
   _sendSnd(cmd) {
     if (this.snd && this.snd.readyState === WebSocket.OPEN) {
@@ -261,7 +281,7 @@ class KiwiAudioSession extends EventEmitter {
   // -- SND -------------------------------------------------------------------
   _openSnd() {
     const url = 'ws://' + this.endpoint + '/ws/kiwi/' + this.session + '/SND';
-    this.snd = new WebSocket(url, { handshakeTimeout: this.opts.connectTimeoutMs });
+    this.snd = new WebSocket(url, this._wsOpts());
 
     this.snd.on('open', () => {
       // Public passwordless receivers only. p=# is the server's "no password"
@@ -380,7 +400,7 @@ class KiwiAudioSession extends EventEmitter {
     this.wfOpened = true;
 
     const url = 'ws://' + this.endpoint + '/ws/kiwi/' + this.session + '/W/F';
-    this.wf = new WebSocket(url, { handshakeTimeout: this.opts.connectTimeoutMs });
+    this.wf = new WebSocket(url, this._wsOpts());
 
     this.wf.on('open', () => {
       this._sendWf('SET auth t=kiwi p=#');
