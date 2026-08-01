@@ -1,0 +1,9 @@
+node_modules/
+data/
+backups/
+config/ENABLED
+config/hfgcs.json
+*.log
+*.bak
+*.bak.*
+.DS_Store

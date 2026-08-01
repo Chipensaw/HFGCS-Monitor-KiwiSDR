@@ -1,0 +1,47 @@
+[Unit]
+Description=HFGCS monitor and player (read-only, loopback)
+After=network.target
+
+[Service]
+Type=simple
+User=hfgcs
+Group=hfgcs
+WorkingDirectory=/opt/hfgcs/monitor
+ExecStart=/usr/bin/node server.js \
+  --data=/opt/hfgcs/data \
+  --port=8898 --host=127.0.0.1 \
+  --unit=hfgcs-recorder \
+  --config=/opt/hfgcs/config/hfgcs.json \
+  --blocklist=/opt/hfgcs/config/blocklist.txt
+
+Restart=always
+RestartSec=5
+UMask=0002
+Nice=10
+MemoryMax=100M
+
+# This process serves the event index and streams recorded captures.
+#
+# It WAS read-only. It no longer is: the settings form writes config/, the
+# label buttons append data/labels.jsonl, and delete moves captures into
+# data/trash/. ReadOnlyPaths=/opt/hfgcs/data silently blocked all three with
+# EROFS, so the write paths below are required, not optional.
+#
+# The one-writer rule still holds where it matters: the RECORDER owns
+# events.jsonl and the monitor must never write it. That is now enforced by
+# code rather than by the filesystem, which is weaker -- worth remembering if
+# anything here ever starts appending to that file.
+#
+# NoNewPrivileges is deliberately NOT set: the monitor needs sudo for exactly
+# two verbs (systemctl start/stop on hfgcs-recorder), scoped in
+# /etc/sudoers.d/hfgcs.
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hfgcs/config /opt/hfgcs/data /opt/hfgcs/backups
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

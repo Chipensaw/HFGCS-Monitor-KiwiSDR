@@ -1,0 +1,10 @@
+{
+  "name": "hfgcs-recorder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HFGCS transmission recorder (KiwiSDR)",
+  "main": "recorder/index.js",
+  "dependencies": {
+    "ws": "8.21.1"
+  }
+}

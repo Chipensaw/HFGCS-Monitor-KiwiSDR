@@ -1,0 +1,14 @@
+# HFGCS recorder -- receiver opt-out list.
+#
+# One entry per line. Matched against the receiver's host or host:port as it
+# appears in the survey cohort. Blank lines and lines beginning with # are
+# ignored.
+#
+# Any sysop who asks to be excluded goes here, no questions and no delay.
+# A wildcard host with no port excludes every port on that host.
+#
+# Format:
+#   example.ddns.net:8073      exclude one receiver
+#   example.ddns.net           exclude all receivers on that host
+#
+# Entries below this line are live.

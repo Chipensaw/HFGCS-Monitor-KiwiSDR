@@ -1,0 +1,22 @@
+[Unit]
+Description=HFGCS retention sweep (prune recordings by age and total size)
+After=network.target
+
+[Service]
+Type=oneshot
+User=hfgcs
+Group=hfgcs
+UMask=0002
+WorkingDirectory=/opt/hfgcs/bin
+ExecStart=/opt/hfgcs/bin/retention.sh /opt/hfgcs/data /opt/hfgcs/config/hfgcs.json
+Nice=15
+CPUQuota=10%
+MemoryMax=64M
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hfgcs/data
+StandardOutput=journal
+StandardError=journal

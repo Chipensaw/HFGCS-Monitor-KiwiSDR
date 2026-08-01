@@ -1,0 +1,24 @@
+HFGCS-Monitor---KiwiSDR
+Copyright 2026 Jay Hendershott (K7GFH)
+
+Licensed under the Apache License, Version 2.0.
+
+---
+
+Receiver directory data is obtained from a cohort file produced by the
+Kiwi-SNR-Surveyor project, which in turn sources it from:
+  http://rx.linkfanel.net/kiwisdr_com.js
+a machine-readable listing generated for the dyatlov map maker by Pierre
+Ynard, distributed under GPLv3+. This project consumes that generated DATA
+only; no GPL-licensed code is incorporated.
+
+KiwiSDR is the work of John Seamons (ZL/KF6VO). This project is an
+independent client and is not affiliated with or endorsed by the KiwiSDR
+project. It runs against publicly listed receivers operated by volunteers --
+please read ETIQUETTE.md before running it.
+
+The High Frequency Global Communications System (HFGCS) is operated by the
+United States Air Force. This project is an independent monitoring tool with
+no affiliation to, or endorsement by, the USAF or any government body. It
+receives publicly propagating radio signals and does not decode, decrypt or
+interpret message content.

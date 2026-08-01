@@ -1,0 +1,162 @@
+{
+  "_note": "HFGCS recorder configuration. Detector thresholds marked PROVISIONAL are not yet calibrated against real empty-channel audio and must not be trusted until Phase 1 supplies it.",
+  "_schema": 1,
+  "frequencies": [
+    {
+      "khz": 4724,
+      "mode": "usb",
+      "active": false,
+      "_note": "night primary"
+    },
+    {
+      "khz": 6739,
+      "mode": "usb",
+      "active": false,
+      "_note": "night secondary"
+    },
+    {
+      "khz": 8992,
+      "mode": "usb",
+      "active": false,
+      "_note": "24H per UDXF"
+    },
+    {
+      "khz": 11175,
+      "mode": "usb",
+      "active": true,
+      "_note": "24H per UDXF; flagship day frequency"
+    },
+    {
+      "khz": 13200,
+      "mode": "usb",
+      "active": false,
+      "_note": "UDXF revision 17 May 2025 marks this not active; enable only if traffic is observed"
+    },
+    {
+      "khz": 15016,
+      "mode": "usb",
+      "active": false,
+      "_note": "day secondary"
+    }
+  ],
+  "receiver": {
+    "_note": "AGC settings are load-bearing. A 0.1 s AGC time constant is a ~1.6 Hz corner on the audio envelope, which notches the exact 0.2-3 Hz band the detector depends on and cost 75% of the discriminating feature in bench measurement. Slow AGC or fixed gain only.",
+    "agcMode": "slow",
+    "agcDecayMs": 2000,
+    "agcHangMs": 0,
+    "requireAgcDecayMsMin": 1000,
+    "outputSampleRate": 12000,
+    "passbandHz": [
+      300,
+      2800
+    ],
+    "_verifyBeforePhase1": "exact kiwirecorder/kiwi-client AGC parameter names and units are NOT yet confirmed against the client source"
+  },
+  "session": {
+    "_note": "One slot on one receiver per frequency, released and reselected on a cap. Smaller footprint than a human who parks on 11175 all evening.",
+    "maxMinutes": 32,
+    "jitterMinutes": 4,
+    "reconnectBackoffMs": [
+      5000,
+      15000,
+      60000,
+      300000
+    ],
+    "maxConsecutiveFailuresPerSite": 3,
+    "idleReleaseMinutes": 0,
+    "rotateDeferMaxSec": 0
+  },
+  "siteSelection": {
+    "_note": "Filter then rank. Pool is seeded from the survey cohort but is deliberately wider, because the cohort's capacity check systematically skipped the popular (i.e. good) receivers -- the survey's own hole #1.",
+    "minUsersMax": 4,
+    "preferDirectEndpoints": true,
+    "allowProxied": false,
+    "requireAntConnected": true,
+    "requireBandCoverage": true,
+    "recentUsePenaltyHours": 24,
+    "rankWeights": {
+      "propagation": 0.4,
+      "surveyQ": 0.25,
+      "mainsPenalty": 0.15,
+      "adcOvPenalty": 0.1,
+      "recentUsePenalty": 0.1
+    },
+    "preferRegions": [
+      "NA-East",
+      "NA-West"
+    ]
+  },
+  "detector": {
+    "_note": "Feature roles established by bench measurement against a real 146 s EAM capture (8992 kHz, 27 Jun 2016) plus synthetic negatives. Reference values: EAM modFraction 0.737, flatness 0.368, harmonicity 0.275. Band-limited noise 0.204 / 0.562 / 0.191. AGC'd empty channel 0.025 / 0.562 / 0.191. Carrier birdie 0.210 / 0.071 / 0.840.",
+    "frameSamples": 512,
+    "hopSamples": 256,
+    "voiceBandHz": [
+      300,
+      2700
+    ],
+    "modBandHz": [
+      0.2,
+      3
+    ],
+    "modWindowSeconds": 6,
+    "modFractionAbsMin": 0.3,
+    "modFractionRatioOverFloor": 3,
+    "floorPercentile": 20,
+    "floorWindowMinutes": 30,
+    "_PROVISIONAL": "modFractionAbsMin and modFractionRatioOverFloor are placeholders. The uploaded reference contains zero empty channel, so it constrains the positive class only and cannot set a threshold. Calibrate against >= 1 hour of real quiet channel before trusting any false-positive claim.",
+    "flatnessRejectBelow": 0.15,
+    "_flatnessNote": "Rejects steady carriers and birdies, which score 0.84 on harmonicity -- higher than speech -- and would otherwise trigger constantly.",
+    "harmonicityUse": "supporting_only",
+    "_harmonicityNote": "Never use as a primary discriminator. See flatnessNote.",
+    "energyUse": "disabled",
+    "_energyNote": "Level arrives flat through receiver AGC; frame energy carried no usable information across the entire reference recording.",
+    "hangoverSeconds": 10,
+    "minEventSeconds": 4,
+    "maxEventSeconds": 600,
+    "expectedSnrFloorDb": 0,
+    "_snrNote": "Feature separation held to roughly 0 dB SNR even through a deliberately hostile 0.1 s AGC. Unmeasured with correct AGC settings."
+  },
+  "propagationGate": {
+    "_note": "Whether a frequency is worth a KiwiSDR slot right now. Holding 4724 kHz through local noon consumes a volunteer's receiver to listen to a dead band. When no eligible receiver has a plausibly open path the worker RELEASES its slot and sleeps. 24H frequencies (8992, 11175) score flat and never gate closed. minScore 0.35 opens the night bands below +3.5deg solar elevation and the day band above -3.5deg, so grayline is included on both sides.",
+    "enabled": true,
+    "minScore": 0.35,
+    "recheckMinutes": 15
+  },
+  "ringBuffer": {
+    "seconds": 60,
+    "preRollSeconds": 10,
+    "_note": "6 ch x 60 s x 12 kHz x 2 B = 8.6 MB. Pre-roll is not optional: trigger-on-detect loses the first syllable of every transmission."
+  },
+  "masking": {
+    "_note": "Some sysops mask HFGCS frequencies. A masked channel returns floor-flat audio while adjacent spectrum behaves normally. Undetected, it logs as a quiet receiver rather than a gagged one.",
+    "enabled": true,
+    "probeOffsetHz": 8000,
+    "flatnessSuspectAbove": 0.6,
+    "consecutiveSuspectSessions": 2
+  },
+  "correlation": {
+    "_note": "HFGCS simulcasts, so one transmission fires several channels at once. Collapsing them is both a dedup and a self-check: a real event appears on 3+ channels, a false positive on one.",
+    "windowSeconds": 45,
+    "minChannelsForHighConfidence": 3,
+    "envelopeXcorrMaxLagMs": 250
+  },
+  "output": {
+    "codec": "opus",
+    "bitrateKbps": 24,
+    "_note": "24 kbps mono is transparent for a 2.7 kHz SSB passband; about 10.8 MB per hour of captured audio."
+  },
+  "retention": {
+    "retentionDays": 90,
+    "maxTotalMB": 8192
+  },
+  "identification": {
+    "_note": "Set this to something a sysop can identify you by. It is sent as SET ident_user= and SERVER DE CLIENT <id> SND. No spaces.",
+    "userAgent": "hfgcs-recorder/0.1 (+https://onlineremoteradio.com/hfgcs/)",
+    "kiwiIdentUser": "YOURCALL-HFGCS",
+    "optOutContact": "see /hfgcs/ page"
+  },
+  "coverage": {
+    "_note": "Rotation and slot contention mean transmissions will be missed. Report the gaps rather than letting the page imply completeness.",
+    "reportPerFrequencyDaily": true
+  }
+}

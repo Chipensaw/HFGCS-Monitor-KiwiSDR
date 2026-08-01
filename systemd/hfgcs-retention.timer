@@ -1,0 +1,15 @@
+[Unit]
+Description=Prune HFGCS recordings daily
+
+[Timer]
+# A recorder with no retention policy fills the disk. This box has 29 G free
+# and shares it with the production relay, so the sweep runs unconditionally
+# rather than waiting for a threshold to be crossed.
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15min
+AccuracySec=5min
+Unit=hfgcs-retention.service
+
+[Install]
+WantedBy=timers.target

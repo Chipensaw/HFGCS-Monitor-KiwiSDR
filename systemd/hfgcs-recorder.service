@@ -1,0 +1,57 @@
+[Unit]
+Description=HFGCS recorder (KiwiSDR, rotating single-slot sessions)
+After=network-online.target
+Wants=network-online.target
+# A persistent crash must stop, not reconnect-hammer volunteer-run receivers.
+# Same reasoning as kiwi-survey-collector: three failures in ten minutes and
+# the unit stays down until a human looks at it.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=hfgcs
+Group=hfgcs
+WorkingDirectory=/opt/hfgcs/recorder
+
+# Two interlocks, both enforced in preflight.sh rather than here so that the
+# reason for a refusal lands in the journal as readable text:
+#   1. config/ENABLED must exist. Installing and enabling this unit is not
+#      the same act as authorising it to contact receivers.
+#   2. kiwi-survey-collector must not be active. Both projects draw slots
+#      from the same KiwiSDR pool; running them together biases the survey's
+#      capacity check from the inside, in a way the cohort fingerprint
+#      cannot detect.
+ExecStartPre=/opt/hfgcs/bin/preflight.sh
+
+ExecStart=/usr/bin/node index.js \
+  --config=/opt/hfgcs/config/hfgcs.json \
+  --cohort=/opt/kiwi-survey/generator/cohort.json \
+  --scores-glob=/opt/kiwi-survey/data/run-*/scores.json \
+  --data=/opt/hfgcs/data \
+  --blocklist=/opt/hfgcs/config/blocklist.txt
+
+# Exit 0 means a clean operator-requested shutdown. Never restart on that.
+Restart=on-failure
+RestartSec=30
+
+# 945 MB box with no swap, already carrying the production relay and coturn.
+# MemoryMax is load-bearing, not hygiene: it confines an OOM kill to this
+# cgroup instead of letting the kernel choose a victim from the whole box.
+UMask=0002
+Nice=10
+CPUQuota=35%
+MemoryMax=250M
+IOSchedulingClass=idle
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hfgcs/data
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
