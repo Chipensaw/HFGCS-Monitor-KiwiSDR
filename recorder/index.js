@@ -293,6 +293,13 @@ class ChannelWorker extends EventEmitter {
 
     if (!rx) {
       log('WARN', 'ch' + this.freqKHz + ' no reachable receiver after ' + maxTries + ' probes');
+      // Same stall as a failed rotation target: _retryLater() does nothing
+      // while a session is current, so without this the rotation timer is
+      // never re-armed and the worker holds its receiver indefinitely.
+      if (this.current) {
+        this._armRotation(this.cfg.session.rotateRetryMinutes);
+        return;
+      }
       return this._retryLater();
     }
 
@@ -316,6 +323,7 @@ class ChannelWorker extends EventEmitter {
       });
     } catch (e) {
       log('ERROR', 'ch' + this.freqKHz + ' session construction failed: ' + e.message);
+      if (this.current) { this._armRotation(this.cfg.session.rotateRetryMinutes); return; }
       return this._retryLater();
     }
 
@@ -337,7 +345,8 @@ class ChannelWorker extends EventEmitter {
     } catch (e) {
       log('ERROR', 'ch' + this.freqKHz + ' open failed: ' + e.message);
       this.pending = null;
-      this._retryLater();
+      if (this.current) this._armRotation(this.cfg.session.rotateRetryMinutes);
+      else this._retryLater();
     }
   }
 
@@ -417,7 +426,18 @@ class ChannelWorker extends EventEmitter {
         // worker waits forever for a 'ready' that is never coming -- which is
         // exactly how a refusing receiver used to wedge a channel.
         this.pending = null;
-        if (!this.current) this._retryLater();
+        if (!this.current) {
+          this._retryLater();
+        } else {
+          // A ROTATION attempt failed. The old session is still streaming, so
+          // there is nothing to recover -- but the rotation timer has already
+          // fired and nothing else will re-arm it. Observed live: a rotation
+          // target hit ready_timeout and the channel then held one receiver
+          // for 124 minutes against a 22 minute cap, which is exactly the
+          // discourtesy the rotation exists to prevent.
+          log('WARN', 'ch' + this.freqKHz + ' rotation target failed, re-arming');
+          this._armRotation(this.cfg.session.rotateRetryMinutes);
+        }
         return;
       }
       if (ctx === this.current) {
@@ -585,12 +605,18 @@ class ChannelWorker extends EventEmitter {
     }
   }
 
-  _armRotation() {
+  /** @param {number} [overrideMinutes] retry sooner after a failed rotation */
+  _armRotation(overrideMinutes) {
     if (this.rotateTimer) clearTimeout(this.rotateTimer);
     const s = this.cfg.session;
-    const jitter = (Math.random() * 2 - 1) * (s.jitterMinutes || 0);
-    const floor = s.minMinutes != null ? s.minMinutes : 1;
-    const mins = Math.max(floor, s.maxMinutes + jitter);
+    let mins;
+    if (overrideMinutes != null) {
+      mins = overrideMinutes;
+    } else {
+      const jitter = (Math.random() * 2 - 1) * (s.jitterMinutes || 0);
+      const floor = s.minMinutes != null ? s.minMinutes : 1;
+      mins = Math.max(floor, s.maxMinutes + jitter);
+    }
     this.rotateDue = Date.now() + mins * 60000;
     this.rotateTimer = setTimeout(() => this._rotate(0), mins * 60000);
   }
@@ -738,6 +764,9 @@ function buildConfig(raw) {
     },
     session: Object.assign({
       maxMinutes: 22, jitterMinutes: 4, minMinutes: 1,
+      // How soon to retry after a rotation TARGET fails. Short: the point is
+      // to stop holding the current receiver past its cap.
+      rotateRetryMinutes: 2,
       reconnectBackoffMs: [5000, 15000, 60000, 300000],
       rotateDeferMaxSec: 180,
       probeTimeoutMs: 2500, maxProbeAttempts: 6

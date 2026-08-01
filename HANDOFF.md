@@ -67,6 +67,14 @@ silently capped event length at ring capacity -- a 600 s event lost its first
 sessions are briefly alive; an earlier version hung ring/detector/capture on the
 worker and the incoming session could adopt the outgoing one's half-written file.
 
+**Every path that abandons a connection attempt must re-arm the rotation
+timer.** `_retryLater()` deliberately does nothing while a session is current,
+so a failed ROTATION -- as opposed to a failed initial connect -- would silently
+disable rotation for that channel. Observed live: a rotation target hit
+`ready_timeout` and the worker then held one receiver for 124 minutes against a
+22 minute cap. There are four such paths (failed target, probe exhaustion,
+session construction, `open()` throwing) and all four are guarded.
+
 **Connect failures expire after 30 minutes.** One-strike retirement with no decay
 drained the whole pool: every eligible receiver failing once took the eligible
 count to zero, `bestPropagation` returned 0, and the propagation gate mistook an
@@ -155,3 +163,10 @@ different problems with different remedies and both return a score of zero.
 - **Transfer by heredoc or in-place patch, never hand-copied base64.**
 - **`pick()` draws randomly from the top N.** Tests that assume an ordering are
   flaky. Test the invariant, not the draw.
+- **Validate every anchor BEFORE writing anything.** A multi-part in-place patch
+  that asserts per-edit will abort halfway and leave the file inconsistent.
+  Check all anchors first, then apply; otherwise a restore from backup is the
+  only safe recovery.
+- **A still-working component can be a broken one.** The stalled rotation looked
+  healthy because audio kept flowing. The only visible symptom was a held time
+  that should have been impossible.
