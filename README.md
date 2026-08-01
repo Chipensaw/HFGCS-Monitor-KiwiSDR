@@ -1,4 +1,4 @@
-# HFGCS-Monitor---KiwiSDR
+# HFGCS-Monitor-KiwiSDR
 
 Unattended recorder for **HFGCS** voice transmissions, using publicly listed
 **KiwiSDR** receivers as its front end. It watches one or more HFGCS
@@ -63,8 +63,8 @@ a worker; the worker owns the frequency.
 Requires Node 20+ and `ws`. Nothing else.
 
 ```bash
-git clone git@github.com:Chipensaw/HFGCS-Monitor---KiwiSDR.git
-cd HFGCS-Monitor---KiwiSDR
+git clone git@github.com:Chipensaw/HFGCS-Monitor-KiwiSDR.git
+cd HFGCS-Monitor-KiwiSDR
 npm install --omit=dev
 
 cp config/hfgcs.example.json config/hfgcs.json
