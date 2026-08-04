@@ -47,7 +47,25 @@ const DEFAULT_CFG = {
   // separates true voice (0.81, 0.84) from spectrally-structured non-voice
   // like a data burst (0.435) and plain static (0.26).
   harmFrameSec: 0.032,
-  pitchHz: [70, 300]
+  pitchHz: [70, 300],
+  // MAINS HUM REJECTION.
+  //
+  // Powerline noise is periodic, and its harmonics (100/120, 150/180,
+  // 200/240 Hz) fall inside the voice pitch range. The autocorrelation test
+  // cannot tell that apart from a voice by strength alone -- measured on a
+  // known-buzzing receiver, 100% of "voiced" hops sat at 120.0 Hz and it
+  // produced 11 false captures in one night.
+  //
+  // The discriminator is STABILITY, not frequency. Human pitch wanders:
+  // measured across a real EAM, relative spread (p90-p10)/p50 was 0.842.
+  // Mains hum is locked to the grid: 0.020, a 40x difference. So a hop is
+  // rejected only if its pitch is BOTH on a mains harmonic AND unnaturally
+  // steady -- a voice that happens to pass through 120 Hz still counts.
+  mainsHz: [50, 60],
+  mainsTolHz: 3.0,
+  mainsStabilityWindow: 12,      // hops of pitch history to judge steadiness
+  pitchTrackMinCorr: 0.40,       // only track pitch from hops that looked voiced
+  mainsMaxSpread: 0.08           // relative spread below this = machine, not voice
 };
 
 // -- FFT: iterative radix-2, precomputed tables, no allocation per call -----
@@ -148,11 +166,18 @@ class FeatureExtractor {
     this.lagLo = Math.floor(c.sampleRate / c.pitchHz[1]);
     this.lagHi = Math.min(this.harmLen - 1, Math.floor(c.sampleRate / c.pitchHz[0]));
 
+    // Rolling pitch history, for the mains-stability test.
+    this.pitchHist = new Float64Array(c.mainsStabilityWindow);
+    this.pitchPos = 0;
+    this.pitchFill = 0;
+
     this.hops = 0;
     this.lastFlatness = 0;
     this.lastVoicePower = 0;
     this.lastModFraction = 0;
     this.lastHarmonicity = 0;
+    this.lastPitchHz = 0;
+    this.lastMainsLocked = false;
   }
 
   /** True once the envelope history is full enough for a valid modFraction. */
@@ -244,7 +269,7 @@ class FeatureExtractor {
     }
     if (e0 < 1e-9) return 0;
 
-    let best = 0;
+    let best = 0, bestLag = 0;
     for (let lag = this.lagLo; lag <= this.lagHi; lag++) {
       let s = 0, n2 = 0;
       for (let k = 0; k + lag < n; k++) {
@@ -252,9 +277,57 @@ class FeatureExtractor {
         n2 += this.harmBuf[k + lag] * this.harmBuf[k + lag];
       }
       const r = s / (Math.sqrt(e0 * n2) + 1e-12);
-      if (r > best) best = r;
+      if (r > best) { best = r; bestLag = lag; }
+    }
+
+    const pitch = bestLag ? c.sampleRate / bestLag : 0;
+    this.lastPitchHz = pitch;
+    this.lastMainsLocked = false;
+
+    // Only record pitches from hops that actually looked periodic. Including
+    // noise-driven hops fills the history with scatter and the spread never
+    // reads as steady -- measured: 126 hops all at exactly 120.0 Hz, and the
+    // stability test fired on none of them.
+    if (best >= c.pitchTrackMinCorr && pitch > 0) {
+      this.pitchHist[this.pitchPos] = pitch;
+      this.pitchPos = (this.pitchPos + 1) % this.pitchHist.length;
+      if (this.pitchFill < this.pitchHist.length) this.pitchFill++;
+
+      if (this._onMainsHarmonic(pitch) && this._pitchTooSteady()) {
+        this.lastMainsLocked = true;
+        return 0;                     // machine hum, not a voice
+      }
     }
     return best;
+  }
+
+  /** Is this pitch within tolerance of a 50 or 60 Hz harmonic? */
+  _onMainsHarmonic(pitch) {
+    const c = this.cfg;
+    for (const base of c.mainsHz) {
+      for (let h = 1; h * base <= c.pitchHz[1] + c.mainsTolHz; h++) {
+        if (Math.abs(pitch - h * base) <= c.mainsTolHz) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Relative spread of recent pitch. Human speech wanders (measured 0.842 on a
+   * real EAM); mains hum does not (0.020).
+   */
+  _pitchTooSteady() {
+    if (this.pitchFill < this.pitchHist.length) return false;
+    let lo = Infinity, hi = -Infinity, sum = 0;
+    for (let i = 0; i < this.pitchFill; i++) {
+      const v = this.pitchHist[i];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+      sum += v;
+    }
+    const mean = sum / this.pitchFill;
+    if (mean <= 0) return false;
+    return ((hi - lo) / mean) < this.cfg.mainsMaxSpread;
   }
 
   _modFraction() {
@@ -288,6 +361,8 @@ class FeatureExtractor {
     this.hops = 0;
     this.lastFlatness = 0; this.lastVoicePower = 0; this.lastModFraction = 0;
     this.lastHarmonicity = 0;
+    this.pitchHist.fill(0); this.pitchPos = 0; this.pitchFill = 0;
+    this.lastPitchHz = 0; this.lastMainsLocked = false;
   }
 }
 

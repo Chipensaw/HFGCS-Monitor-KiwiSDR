@@ -50,6 +50,72 @@ const { EventEmitter } = require('events');
 const SND_HEADER_BYTES = 10;
 const AGC_DECAY_MS_MIN = 1000;
 
+// -- Waterfall protocol -----------------------------------------------------
+// Ported from kiwi-survey/collector/kiwi-client.js, where every one of these
+// was verified against live receivers rather than inferred. Do not "simplify"
+// them without re-measuring.
+//
+//   * ONE session id serves BOTH sockets. The Kiwi keys an rx channel by it, so
+//     SND + W/F on one id cost ONE channel against the sysop's declared limit.
+//   * BOTH sockets need their own keepalive; an idle W/F tears down the whole
+//     session and takes audio with it.
+//   * Frames are 1040 bytes: 16-byte header then 1024 one-byte bins.
+//     Header: 'W/F' + 0x20, start LE u32 @4, zoom u8 @8, 3 pad, counter @12.
+//   * dBm = byte - 255 when send_dB=1. maxdb/mindb govern browser display only.
+//   * `start` is a 24-bit fixed-point LOW-EDGE OFFSET across the receiver's full
+//     bandwidth, NOT a bin index.
+//   * Receivers may send compressed rows at higher zoom regardless of wf_comp=0.
+//     We detect those by length and skip them rather than misread them.
+//
+// And the one this project learned the hard way: a W/F socket opened WITHOUT
+// `SET zoom=/start=` gets the entire session torn down. Measured on a live
+// receiver: without it the audio socket closed at 20.3 s having delivered zero
+// waterfall frames; with it, 90 s and still streaming, 88 frames received.
+const WF_BINS = 1024;
+const WF_HEADER_BYTES = 16;
+const WF_FRAME_BYTES = WF_HEADER_BYTES + WF_BINS;   // 1040
+const WF_ADPCM_FRAME_BYTES = 533;                   // compressed: skip
+const WF_START_MAX = (2 ** 24) - 1;
+const WF_ZOOM_HARD_CAP = 20;
+
+/**
+ * Highest zoom whose segment still fully contains the requested view.
+ */
+function computeZoomStart(view, span, zoomCap) {
+  if (!view || !span || !span.fullBandwidthHz) return null;
+  const cap = Math.min(
+    Number.isFinite(zoomCap) ? zoomCap : WF_ZOOM_HARD_CAP, WF_ZOOM_HARD_CAP);
+  const { fullLowHz, fullBandwidthHz } = span;
+  const startFor = (lowHz) =>
+    Math.round(((lowHz - fullLowHz) / fullBandwidthHz) * (WF_START_MAX + 1));
+
+  for (let z = Math.max(0, cap); z >= 0; z--) {
+    const rowSpan = fullBandwidthHz / Math.pow(2, z);
+    const mid = (view.lowHz + view.highHz) / 2;
+    let segLow = mid - rowSpan / 2;
+    if (segLow < fullLowHz) segLow = fullLowHz;
+    if (segLow + rowSpan > fullLowHz + fullBandwidthHz) {
+      segLow = fullLowHz + fullBandwidthHz - rowSpan;
+    }
+    if (segLow <= view.lowHz && segLow + rowSpan >= view.highHz) {
+      const start = startFor(segLow);
+      if (!Number.isFinite(start)) return null;
+      return {
+        zoom: Math.max(0, Math.min(z, WF_ZOOM_HARD_CAP)),
+        start: Math.max(0, Math.min(start, WF_START_MAX)),
+        segLowHz: segLow,
+        rowSpanHz: rowSpan,
+        binHz: rowSpan / WF_BINS
+      };
+    }
+  }
+  return {
+    zoom: 0, start: 0,
+    segLowHz: fullLowHz, rowSpanHz: fullBandwidthHz,
+    binHz: fullBandwidthHz / WF_BINS
+  };
+}
+
 const DEFAULTS = {
   identUser: 'hfgcs-recorder',
   // Sent as the HTTP User-Agent on the WebSocket upgrade. The receiver's user
@@ -94,11 +160,30 @@ const DEFAULTS = {
   //
   // It was only ever opened for masking detection, which is not built. Turn it
   // on again when that is, and send a zoom/start when you do.
+  // Now safe to enable: the missing zoom/start was the whole cause of the
+  // teardown. Off by default still, so a caller opts in per session.
   openWaterfall: false,
   wf: {
-    speed: 1,
+    // Measured row rate on a live receiver: speed 1 -> 0.99 rows/s, speed 2 ->
+    // 4.88 rows/s (3 and 4 were SLOWER, apparently rate-limited).
+    //
+    // At 1 row/s a 20 s capture yields ~20 rows to fill a 144-row image, so
+    // each row is repeated seven times and the thumbnail is a blocky ladder.
+    //
+    // The cost is real and belongs in ETIQUETTE.md: ~5 KB/s per session rather
+    // than ~1 KB/s. Still small against the audio stream, but it is somebody
+    // else's bandwidth.
+    speed: 2,
     maxDb: -10,
-    minDb: -110
+    minDb: -110,
+    // Half-width of the view to request around the tuned frequency. 12 kHz puts
+    // a 3 kHz SSB signal in about an eighth of the row -- the narrow-band-in-
+    // context look the audio spectrogram cannot produce.
+    viewHalfWidthHz: 12000,
+    // Rows kept in memory. At ~4.9 rows/s this is ~3 minutes of history, which
+    // covers the longest captures seen so far (170 s). 1 KB per row, so ~900 KB
+    // per channel -- affordable on a 945 MB box.
+    maxRows: 900
   }
 };
 
@@ -175,6 +260,10 @@ class KiwiAudioSession extends EventEmitter {
     this.ready = false;
     this.setupSent = false;
     this.wfOpened = false;
+    this.span = null;          // {fullLowHz, fullBandwidthHz} from the receiver
+    this.zoomCap = null;
+    this.wfView = null;        // the zoom/start actually requested
+    this.wfRows = [];          // rolling ring of decoded rows
     this.audioRate = null;
     this.errorInfo = null;
 
@@ -186,6 +275,7 @@ class KiwiAudioSession extends EventEmitter {
       bytes: 0,
       lastFrameAt: 0,
       wfFrames: 0,
+      wfCompressed: 0,
       retunes: 0
     };
   }
@@ -395,6 +485,52 @@ class KiwiAudioSession extends EventEmitter {
   // Kept open for two reasons: an idle W/F tears down the session, and the
   // spectrum it carries is what will later distinguish a masked HFGCS channel
   // from a genuinely quiet one. At wf_speed=1 it costs ~1 kB/s.
+  /**
+   * Ask for the view we actually want. Needs the receiver's span, which arrives
+   * as center_freq/bandwidth on the W/F socket, so this is called again once
+   * that lands.
+   */
+  _sendWfView() {
+    if (!this.span || !this.wf || this.wf.readyState !== WebSocket.OPEN) return false;
+    const half = this.opts.wf.viewHalfWidthHz;
+    const hz = this.freqKHz * 1000;
+    const zs = computeZoomStart({ lowHz: hz - half, highHz: hz + half }, this.span, this.zoomCap);
+    if (!zs) return false;
+    this.wfView = zs;
+    this._sendWf('SET zoom=' + zs.zoom + ' start=' + zs.start);
+    return true;
+  }
+
+  /**
+   * One waterfall row. Compressed rows are SKIPPED rather than misread: some
+   * receivers switch to them at higher zoom regardless of wf_comp=0, and a
+   * misdecoded row is worse than a missing one.
+   */
+  _onWfFrame(buf) {
+    if (buf.length === WF_ADPCM_FRAME_BYTES) { this.stats.wfCompressed++; return; }
+    if (buf.length !== WF_FRAME_BYTES) return;
+    this.stats.wfFrames++;
+    const bins = Buffer.allocUnsafe(WF_BINS);
+    buf.copy(bins, 0, WF_HEADER_BYTES);
+    this.wfRows.push({ at: Date.now(), bins });
+    if (this.wfRows.length > this.opts.wf.maxRows) this.wfRows.shift();
+  }
+
+  /** Rows overlapping a time window, with the geometry to label the axis. */
+  waterfallRows(fromMs, toMs) {
+    if (!this.wfView || !this.wfRows.length) return null;
+    const rows = this.wfRows.filter((r) => r.at >= fromMs && r.at <= toMs);
+    if (rows.length < 2) return null;
+    return {
+      rows: rows.map((r) => r.bins),
+      segLowHz: this.wfView.segLowHz,
+      rowSpanHz: this.wfView.rowSpanHz,
+      binHz: this.wfView.binHz,
+      zoom: this.wfView.zoom,
+      freqKHz: this.freqKHz
+    };
+  }
+
   _openWf() {
     if (this.wfOpened || this.closed) return;
     this.wfOpened = true;
@@ -410,6 +546,13 @@ class KiwiAudioSession extends EventEmitter {
       this._sendWf('SET send_dB=1');
       this._sendWf('SET maxdb=' + this.opts.wf.maxDb + ' mindb=' + this.opts.wf.minDb);
       this._sendWf('SET wf_speed=' + this.opts.wf.speed);
+
+      // THE COMMAND THAT MATTERS. A waterfall socket that never asks for data
+      // looks like a broken client and the receiver tears down the WHOLE
+      // session, audio included. Measured: without this, SND closed at 20.3 s
+      // with zero W/F frames; with it, 90 s and still streaming.
+      this._sendWfView();
+      this._sendWf('SET keepalive');
     });
 
     this.wf.on('message', (data) => {
@@ -426,14 +569,21 @@ class KiwiAudioSession extends EventEmitter {
         if (f.too_busy !== undefined) {
           return this._fail('too_busy', 'receiver reports too_busy');
         }
+        if (f.zoom_cap !== undefined) {
+          const z = Number(f.zoom_cap);
+          if (Number.isFinite(z)) this.zoomCap = z;
+        }
         const c = Number(f.center_freq);
         const b = Number(f.bandwidth);
         if (Number.isFinite(c) && Number.isFinite(b) && b > 0) {
+          this.span = { fullLowHz: c - b / 2, fullBandwidthHz: b };
           this.emit('meta', { centerFreq: c, bandwidth: b });
+          // The view could not be computed before this arrived, so ask now.
+          if (!this.wfView) this._sendWfView();
         }
         return;
       }
-      if (tag === 'W/F') this.stats.wfFrames++;
+      if (tag === 'W/F') return this._onWfFrame(buf);
     });
 
     // A dead W/F is not fatal to audio as long as we keep the SND keepalive
@@ -446,6 +596,12 @@ class KiwiAudioSession extends EventEmitter {
 
 module.exports = {
   KiwiAudioSession,
+  computeZoomStart,
+  WF_BINS,
+  WF_HEADER_BYTES,
+  WF_FRAME_BYTES,
+  WF_ADPCM_FRAME_BYTES,
+  WF_START_MAX,
   parseMsg,
   SND_HEADER_BYTES,
   AGC_DECAY_MS_MIN,

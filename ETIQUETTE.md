@@ -18,7 +18,7 @@ without limits is a distributed denial of service against hobbyists.
 | Make-before-break rotation | The brief two-slot overlap is across DIFFERENT receivers |
 | `usersMax >= 4` filter | Taking 1 of 2 slots is half a volunteer's capacity |
 | Proxied endpoints excluded by default | `proxy.kiwisdr.com` bandwidth is donated to the community |
-| Waterfall socket NOT opened | Halves what we ask of the receiver, and avoids a teardown bug |
+| Waterfall socket opened, at the LOWEST useful rate | Costs no extra rx channel (one session id serves both sockets) but ~5 KB/s of a volunteer's bandwidth. See below |
 | TCP probe before the WebSocket handshake | A dead host costs ~2.5 s, not a full connect timeout |
 | One connect failure retires a receiver for 30 min | No reconnect hammering |
 | `ip_limit` / `too_busy` abandons immediately, no retry | A refusal is an answer |
@@ -50,6 +50,33 @@ config/blocklist.txt
 example.ddns.net:8073      exclude one receiver
 example.ddns.net           exclude every port on that host
 ```
+
+## The second socket
+
+This tool opens TWO WebSockets per session: audio, and the receiver's waterfall.
+Being straight about what that costs.
+
+**It does not cost an extra receive channel.** One session id serves both, so
+the sysop's declared slot count is unaffected -- we still occupy exactly one.
+
+**It does cost bandwidth.** Measured on a live receiver: about 5 KB/s for
+waterfall rows on top of the audio stream, so roughly 18 MB per hour per
+session. Small against most connections, but it is somebody else's line.
+
+**Why it is worth asking for.** Demodulated audio is 12 kHz wide, so an audio
+spectrogram can never show more than 6 kHz and a transmission fills the whole
+frame with no context. The waterfall gives ~29 kHz of real spectrum, which shows
+whether a detection is the tuned channel or a strong neighbour bleeding into the
+passband. That distinction is not visible any other way.
+
+**If you would rather we did not**, set `receiver.openWaterfall: false`. The tool
+falls back to audio spectrograms and loses nothing else.
+
+One protocol note for anyone writing their own client: a waterfall socket opened
+WITHOUT `SET zoom=/start=` gets the whole session torn down, audio included.
+Measured here at 20.3 seconds. It looks like a client bug on our side, not a
+receiver fault, and it is worth getting right before pointing one at somebody's
+hardware.
 
 ## What identifies a connection
 

@@ -88,6 +88,28 @@ the detector used to live in. `kiwi-audio-client.js` throws on any value below
 - **Data-mode rejection.** Known to fail on at least one structured non-voice
   signal.
 
+## The mains-hum false positive
+
+A receiver with heavy powerline noise produced 11 false captures in one night.
+Every hop it scored as "voiced" sat at exactly 120.0 Hz -- the second harmonic
+of 60 Hz mains -- which autocorrelation cannot distinguish from a voice by
+strength alone.
+
+The discriminator is **stability, not frequency**. Human pitch wanders: measured
+across the reference EAM, relative spread (p90-p10)/p50 was 0.842. Mains hum is
+locked to the grid: 0.020, a 40x difference. A hop is rejected only when its
+pitch is BOTH on a 50/60 Hz harmonic AND unnaturally steady, so a voice passing
+through 120 Hz still counts.
+
+Replayed against the 11 real captures: 10.7-17.8% voiced fell to 0.9-1.7%, well
+below the trigger. The reference EAM moved 27.36% -> 27.35%, and only 2 hops of
+6842 were rejected. The filter is surgical.
+
+One caution recorded here because it cost time: a synthetic pure sine is NOT a
+good stand-in for real mains noise. It is too clean for the pitch tracker to lock
+onto consistently and scores higher than the real thing. The unit test asserts
+only that the mechanism engages; the real verification is the replay.
+
 ## Two captures nobody has listened to
 
 The highest-scoring non-voice files in the set, both kept by the current gate:

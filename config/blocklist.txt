@@ -12,3 +12,11 @@
 #   example.ddns.net           exclude all receivers on that host
 #
 # Entries below this line are live.
+
+# Jumonville PA. Excluded 2026-08-02: heaviest powerline noise in the
+# 200-receiver survey cohort (37.5 dB, verified twice at two
+# frequencies). Produced 11 false captures in one night before the
+# detector learned to reject 120 Hz mains harmonics. The detector now
+# rejects the hum, but the receiver still cannot usefully hear HFGCS,
+# so holding one of its 6 slots serves nobody.
+w3piesdr.ddns.net

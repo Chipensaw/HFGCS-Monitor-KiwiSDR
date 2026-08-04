@@ -55,6 +55,9 @@ const DEFAULT_CFG = {
 
   confirmSeconds: 0.5,
   hangoverSeconds: 3.0,
+  // Audio kept after the last voiced hop, so the final syllable survives the
+  // trim. Independent of hangoverSeconds, which governs how long to WAIT.
+  trailingSeconds: 1.0,
   minEventSeconds: 4.0,
   maxEventSeconds: 600
 };
@@ -98,6 +101,7 @@ class VoiceDetector extends EventEmitter {
     this.harmVoiced = 0;
     this.voicedFraction = 0;
 
+    this.lastVoiceAbs = 0;    // absolute index of the last voiced hop
     this.absPos = 0;          // absolute sample index of the NEXT sample
     this.state = 'idle';
     this.candidateHops = 0;
@@ -165,8 +169,15 @@ class VoiceDetector extends EventEmitter {
           this.state = 'active';
           this.quietHops = 0;
           this.stats.triggers++;
+          this.lastVoiceAbs = hopEndAbs;
           this.event = {
             startAbs: this._candidateStartAbs,
+            // The rolling-window value the GATE actually tested. The whole-file
+            // average computed later is a different quantity -- it includes
+            // pre-roll static and inter-word pauses, so it reads far lower and
+            // looks like a threshold violation when nothing is wrong.
+            voicedAtTrigger: this.voicedFraction,
+            peakVoicedFraction: this.voicedFraction,
             peakModFraction: f.modFraction,
             sumModFraction: f.modFraction,
             hops: 1,
@@ -192,9 +203,18 @@ class VoiceDetector extends EventEmitter {
     ev.hops++;
     ev.sumModFraction += f.modFraction;
     if (f.modFraction > ev.peakModFraction) ev.peakModFraction = f.modFraction;
+    if (this.voicedFraction > ev.peakVoicedFraction) {
+      ev.peakVoicedFraction = this.voicedFraction;
+    }
 
     if (voiceLike) {
       this.quietHops = 0;
+      // Remember where voice was LAST heard. The hangover is trimmed off the
+      // tail on the assumption that it is silence -- but speech can resume
+      // inside the hangover window, and blindly subtracting hangoverSeconds
+      // then discards live audio. Observed: a 14.8s capture that was still
+      // mid-sentence at its final sample.
+      this.lastVoiceAbs = hopEndAbs;
     } else {
       this.quietHops++;
     }
@@ -202,9 +222,23 @@ class VoiceDetector extends EventEmitter {
     const durationSec = (hopEndAbs - ev.startAbs) / c.sampleRate;
 
     if (this.quietHops >= this.hangoverHops) {
-      // Trim the hangover itself off the tail; it is silence by definition.
-      const endAbs = hopEndAbs - Math.round(c.hangoverSeconds * c.sampleRate);
-      this._close(Math.max(ev.startAbs, endAbs), 'hangover');
+      // CONSERVATIVE TRIM. Keep everything up to the close, minus only the
+      // uninterrupted quiet run that triggered it.
+      //
+      // Two earlier versions both cut into live audio. Subtracting
+      // hangoverSeconds blindly assumed the window was silent, and it often
+      // was not. Trimming back to the last VOICED hop was worse: a real 34 s
+      // event was cut to 18.7 s, discarding speech the operator could plainly
+      // hear, which then re-triggered as a second file with a seamless join.
+      //
+      // quietHops counts the CURRENT unbroken non-voice run, so subtracting it
+      // removes exactly that run and nothing earlier. Anything before it was
+      // part of the event and is kept, even if the voicing test disliked it.
+      // Trailing static is a far cheaper mistake than lost transmission.
+      const quietSamples = this.quietHops * c.hop;
+      const tail = Math.round((c.trailingSeconds != null ? c.trailingSeconds : 1.0) * c.sampleRate);
+      const endAbs = hopEndAbs - quietSamples + tail;
+      this._close(Math.max(ev.startAbs, Math.min(hopEndAbs, endAbs)), 'hangover');
     } else if (durationSec >= c.maxEventSeconds) {
       this._close(hopEndAbs, 'max_length');
     }
@@ -231,6 +265,8 @@ class VoiceDetector extends EventEmitter {
       reason,
       peakModFraction: ev.peakModFraction,
       meanModFraction: ev.sumModFraction / Math.max(1, ev.hops),
+      voicedAtTrigger: ev.voicedAtTrigger,
+      peakVoicedFraction: ev.peakVoicedFraction,
       floorAtTrigger: ev.floorAtTrigger,
       thresholdAtTrigger: ev.thresholdAtTrigger
     });
@@ -244,6 +280,8 @@ class VoiceDetector extends EventEmitter {
         startAbs: endAbs,
         peakModFraction: 0,
         sumModFraction: 0,
+        voicedAtTrigger: this.voicedFraction,
+        peakVoicedFraction: this.voicedFraction,
         hops: 0,
         floorAtTrigger: this.floorValue,
         thresholdAtTrigger: 0

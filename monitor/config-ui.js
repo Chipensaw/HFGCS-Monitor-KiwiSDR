@@ -46,13 +46,26 @@ const SCHEMA = [
     help: 'Also require this multiple of the per-channel rolling floor.',
     measured: 'PROVISIONAL. Raising this cuts false positives and misses weak signals.' },
 
+  { group: 'Detector', key: 'detector.minVoicedFraction', type: 'float', min: 0.005, max: 0.90,
+    label: 'Minimum voiced fraction',
+    help: 'How much of the rolling window must sound voiced to trigger. This is the "voiced" column on the capture list.',
+    measured: 'Across 69 confirmed not-voice captures: median 0.00%, p95 0.22%. Confirmed voice: 3.14% (weak, fading), 35.6%, 38.3%. Raising this to 0.15 would keep only green rows but LOSE the confirmed weak one. 0.05 is a middle option.' },
+
+  { group: 'Detector', key: 'detector.harmVoicedThreshold', type: 'float', min: 0.10, max: 0.95,
+    label: 'Voicing strength per hop',
+    help: 'Autocorrelation level at which a single hop counts as voiced.',
+    measured: 'Confirmed voice peaks at 0.81-0.84; confirmed static 0.24-0.27. 0.40 sits in the gap. Raising it makes every capture score lower, so adjust the fraction above rather than this unless you know why.' },
+
   { group: 'Detector', key: 'detector.flatnessRejectBelow', type: 'float', min: 0.0, max: 1.0,
     label: 'Carrier reject below flatness',
     help: 'Spectral flatness under this is a carrier or birdie, not speech.',
     measured: 'Measured: carrier 0.071, speech 0.368, noise 0.562. 0.15 sits in the gap.' },
 
-  { group: 'Detector', key: 'detector.hangoverSeconds', type: 'float', min: 0.5, max: 30,
+  { group: 'Detector', key: 'detector.hangoverSeconds', type: 'float', min: 0.5, max: 60,
     label: 'Hangover (s)', help: 'Silence tolerated before an event closes.' },
+  { group: 'Detector', key: 'detector.trailingSeconds', type: 'float', min: 0, max: 10,
+    label: 'Trailing audio kept (s)',
+    help: 'Audio kept after the quiet run is trimmed, so the last syllable survives.' },
   { group: 'Detector', key: 'detector.minEventSeconds', type: 'float', min: 0.5, max: 120,
     label: 'Minimum event (s)', help: 'Shorter captures are discarded.' },
   { group: 'Detector', key: 'detector.maxEventSeconds', type: 'int', min: 10, max: 3600,

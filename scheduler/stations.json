@@ -1,0 +1,37 @@
+{
+  "_note": "HFGCS ground stations: locations and the published per-frequency schedule. Coordinates are the approximate centre of each publicly-known base, to about 0.01 degrees -- good enough for path-midpoint and great-circle work, not a survey reference.",
+  "_sources": [
+    "Station list: USAF HFGCS (udxf.nl), priyom.org, en.wikipedia.org/wiki/High_Frequency_Global_Communications_System",
+    "Schedule: UDXF / RadioReference summer (Apr-Sep) table",
+    "SAM.gov RFI AFLCMC/HBDH confirms 13 stations, NCS at Andrews and Grand Forks"
+  ],
+  "_scheduleNote": "Times are UTC. 8992 and 11175 are 24-hour at every station. 6739 and the day/night pairs rotate. This table is the SUMMER (Apr-Sep) schedule; a winter table exists and is not yet transcribed. 13200 was marked not active in the May 2025 UDXF revision.",
+  "stations": [
+    { "id": "ADW", "name": "Andrews",     "site": "Joint Base Andrews, Maryland, USA",        "lat": 38.81,  "lon": -76.87,
+      "schedule": { "4724": "0500-1330", "6739": "0300-1600", "8992": "24h", "11175": "24h", "13200": "1330-0500", "15016": "1600-0300" } },
+    { "id": "OFF", "name": "Offutt",      "site": "Offutt AFB, Nebraska, USA",                "lat": 41.12,  "lon": -95.91,
+      "schedule": { "4724": "0400-1330", "6739": "0200-1700", "8992": "24h", "11175": "24h", "13200": "1330-0400", "15016": "1700-0200" } },
+    { "id": "MCC", "name": "West Coast",  "site": "McClellan, California, USA",               "lat": 38.67,  "lon": -121.40,
+      "schedule": { "4724": "0600-1400", "6739": "0300-1800", "8992": "24h", "11175": "24h", "13200": "1400-0600", "15016": "1800-0300" } },
+    { "id": "AED", "name": "Elmendorf",   "site": "JB Elmendorf-Richardson, Alaska, USA",     "lat": 61.25,  "lon": -149.81,
+      "schedule": { "4724": "0600-1500", "6739": "0400-1700", "8992": "24h", "11175": "24h", "13200": "1500-0600", "15016": "1700-0400" } },
+    { "id": "HIK", "name": "Hickam",      "site": "JB Pearl Harbor-Hickam, Hawaii, USA",      "lat": 21.33,  "lon": -157.95,
+      "schedule": { "4724": "0800-1700", "6739": "0700-1800", "8992": "24h", "11175": "24h", "13200": "1700-0800", "15016": "1800-0700" } },
+    { "id": "JNR", "name": "Puerto Rico", "site": "Salinas, Puerto Rico",                     "lat": 17.98,  "lon": -66.28,
+      "schedule": { "4724": "0400-1200", "6739": "0100-1400", "8992": "24h", "11175": "24h", "13200": "1200-0400", "15016": "1400-0100" } },
+    { "id": "GUA", "name": "Andersen",    "site": "Andersen AFB, Guam",                       "lat": 13.58,  "lon": 144.92,
+      "schedule": { "4724": "1300-2200", "6739": "1100-2400", "8992": "24h", "11175": "24h", "13200": "2200-1300", "15016": "2400-1100" } },
+    { "id": "JTY", "name": "Yokota",      "site": "Yokota Air Base, Japan",                   "lat": 35.75,  "lon": 139.35,
+      "schedule": { "4724": "1300-2200", "6739": "1100-2200", "8992": "24h", "11175": "24h", "13200": "2200-1300", "15016": "2200-1100" } },
+    { "id": "JDG", "name": "Diego Garcia","site": "NSF Diego Garcia, British Indian Ocean Ty","lat": -7.31,  "lon": 72.41,
+      "schedule": { "4724": "1400-0100", "6739": "1200-0200", "8992": "24h", "11175": "24h", "13200": "0100-1400", "15016": "0200-1200" } },
+    { "id": "CRO", "name": "Croughton",   "site": "RAF Croughton, United Kingdom",            "lat": 51.99,  "lon": -1.19,
+      "schedule": { "4724": "2300-0600", "6739": "2100-0800", "8992": "24h", "11175": "24h", "13200": "0600-2300", "15016": "0800-2100" } },
+    { "id": "ICZ", "name": "Sigonella",   "site": "NAS Sigonella, Sicily, Italy",             "lat": 37.40,  "lon": 14.92,
+      "schedule": { "4724": "2200-0530", "6739": "1900-0900", "8992": "24h", "11175": "24h", "13200": "0530-2200", "15016": "0900-1900" } },
+    { "id": "PLA", "name": "Lajes",       "site": "Lajes Field, Azores, Portugal",            "lat": 38.76,  "lon": -27.09,
+      "schedule": { "4724": "2200-0800", "6739": "2000-1200", "8992": "24h", "11175": "24h", "13200": "0800-2200", "15016": "1200-2000" } },
+    { "id": "HAW", "name": "Ascension",   "site": "Ascension Auxiliary Field, Ascension Is.", "lat": -7.97,  "lon": -14.39,
+      "schedule": { "4724": "2300-0700", "6739": "2200-0900", "8992": "24h", "11175": "24h", "13200": "0700-2300", "15016": "0900-2200" } }
+  ]
+}

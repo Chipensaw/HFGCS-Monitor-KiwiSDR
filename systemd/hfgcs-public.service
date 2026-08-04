@@ -1,0 +1,40 @@
+[Unit]
+# Public read-only view of HFGCS captures.
+#
+# A SEPARATE PROCESS, not a route on the operator monitor. The monitor holds a
+# sudo grant for systemctl start/stop and can write config, labels and trash.
+# Exposing any part of it to the internet would put that grant one routing
+# mistake away from a stranger. This process has no sudo grant, no write paths,
+# and answers only GET and HEAD.
+Description=HFGCS public view (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hfgcs
+Group=hfgcs
+WorkingDirectory=/opt/hfgcs/monitor
+ExecStart=/usr/bin/node public.js \
+  --data=/opt/hfgcs/data \
+  --stations=/opt/hfgcs/scheduler/stations.json \
+  --port=8897 --host=127.0.0.1
+
+Restart=on-failure
+RestartSec=10s
+
+# Read-only everywhere. Unlike the monitor, this genuinely never writes.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=192M
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

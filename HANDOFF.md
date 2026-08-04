@@ -41,11 +41,15 @@ Each of these cost time to find. They are not guesses.
   the receiver completes the WebSocket upgrade then silently ignores the
   connection -- no error, no close, no bytes. Measured on two hosts: numeric ->
   16 protocol messages, `<ts>-<rand>` -> 0.
-- **Do not open the W/F socket.** Measured, same tune, same keepalive: SND only
-  streamed past 75 s (1713 frames); SND + W/F was closed by the receiver at
-  26.1 s. Neither this client nor Kiwi-SNR-Surveyor's sends `SET zoom=/start=`,
-  and a waterfall socket that never asks for data gets the whole session torn
-  down. `openWaterfall: false` is the default for this reason.
+- **A W/F socket MUST send `SET zoom=/start=`.** Without it the receiver tears
+  down the whole session, audio included: measured at 20.3 s with zero waterfall
+  frames, against 90 s and still streaming once the command was sent.
+
+  **Correction to an earlier note in this file:** it previously claimed that
+  neither this client nor Kiwi-SNR-Surveyor's sends that command, and warned that
+  the survey's captures may have been silently truncated. That was wrong. The
+  survey sends it (`kiwi-client.js:341`) and was never affected. The teardown was
+  entirely our own bug.
 - **SND frames are a 10-byte header then big-endian int16.**
 - **AGC decay must be >= 1000 ms.** See the calibration doc.
 - `ip_limit` / `too_busy` in a MSG frame means abandon immediately.
@@ -87,11 +91,11 @@ different problems with different remedies and both return a score of zero.
 
 ## Known holes
 
-1. **The UDXF ground-station schedule is not transcribed.** The biggest
-   structural gap. Site selection cannot compute a path midpoint, so it falls
-   back to solar geometry plus a region preference. HFGCS ground stations are
-   fixed and known; using them would make selection principled rather than
-   heuristic.
+1. **The UDXF schedule is transcribed but not USED by site selection.**
+   `scheduler/stations.json` now holds all 13 ground stations with coordinates
+   and the summer per-frequency table, and the public map uses it. Site selection
+   still does not compute a path midpoint from it. The WINTER table is not
+   transcribed.
 2. **Region preference is advisory, not decisive.** Weight 0.35. It moved
    selection from 26% to 100% North America in a synthetic pool, but live it
    lost a channel to a New Zealand receiver with a better instantaneous path.
@@ -119,6 +123,15 @@ different problems with different remedies and both return a score of zero.
     same message on several frequencies at once. Grouping them is both dedup
     and a free confidence check: a real event appears on 3+ channels, a false
     positive on one.
+10. **Waterfall row rate varies by receiver** -- 2.25 to 3.8 rows/s at
+    `wf_speed=2`, not the 4.88 measured on one host. A 15 s capture yields ~35
+    rows against a 144-row image. The renderer sizes to the rows available
+    rather than stretching, which is honest but makes thumbnails uneven.
+11. **One capture fell back to audio on a healthy session** (225 s, 2026-08-04
+    13:06) with no obvious cause. Not reproduced since.
+12. **Waterfall span is a guess.** `wf.viewHalfWidthHz` is 12 kHz, chosen before
+    there was anything to look at. Never compared against 6 or 25 kHz on real
+    signals.
 
 ---
 
@@ -126,8 +139,8 @@ different problems with different remedies and both return a score of zero.
 
 1. Listen to the two `moxley.us` captures named in the calibration doc.
    Cheapest possible improvement to the threshold.
-2. Transcribe the UDXF schedule into `scheduler/stations.json` and compute path
-   midpoints.
+2. Use `scheduler/stations.json` in site selection: path midpoint per frequency
+   per hour, rather than solar geometry alone. Transcribe the winter table.
 3. Retention for `data/trash` -- age and size cap, same as events.
 4. Group fragmented captures into single transmissions for display.
 5. Build simulcast correlation on top of that grouping.
@@ -163,6 +176,25 @@ different problems with different remedies and both return a score of zero.
 - **Transfer by heredoc or in-place patch, never hand-copied base64.**
 - **`pick()` draws randomly from the top N.** Tests that assume an ordering are
   flaky. Test the invariant, not the draw.
+- **Never read values back out of a rendered image.** Decoding the jet palette
+  to check a spectrogram produced FOUR wrong conclusions in one session: deep
+  blue `(0,0,128)` read as maximum brightness twice, cyan reported as red, and a
+  phantom 30% frequency error caused by the red channel falling from 255 to 128
+  at the top of the ramp. Compute the cell values with the same arithmetic the
+  renderer uses.
+- **Auto-scaling contrast lies about empty data.** Scaling to the range present
+  is right when a signal exists and wrong when one does not: an empty channel has
+  only ~10 dB of receiver noise variation, and stretching that across the ramp
+  paints a full-frame rainbow that reads as activity. Hold a minimum span open.
+- **Hand-maintained passthrough lists silently drop settings.** This bit twice:
+  `buildConfig` swallowed three detector settings, and the session options would
+  have swallowed `openWaterfall`. Both now forward everything with a generic
+  test. Treat any explicit key list between config and consumer as a defect
+  waiting to happen.
+- **A change that appears to do nothing may have worked.** Twice a deployed fix
+  looked inert: once because a config whitelist dropped it, once because the
+  browser was serving a cached thumbnail. Check delivery before re-debugging the
+  logic.
 - **Validate every anchor BEFORE writing anything.** A multi-part in-place patch
   that asserts per-edit will abort halfway and leave the file inconsistent.
   Check all anchors first, then apply; otherwise a restore from backup is the

@@ -51,6 +51,7 @@ const { Store, safeSite, stamp, utcDay } = require('./store');
 const { WavStreamWriter } = require('./encoder');
 const { VoiceDetector } = require('../detector/voice-detector');
 const { analyseBuffer } = require('../detector/features');
+const { renderFileWith } = require('./spectrogram');
 const { SiteSelector, loadPool, loadBlocklist } = require('../scheduler/select');
 
 function parseArgs(argv) {
@@ -319,7 +320,15 @@ class ChannelWorker extends EventEmitter {
         mode: this.cfg.mode || 'usb',
         lowCut: this.cfg.receiver.passbandHz[0],
         highCut: this.cfg.receiver.passbandHz[1],
-        agc: this.cfg.agc
+        agc: this.cfg.agc,
+        // Everything else in `receiver` passes straight through, so a new
+        // client option does not need a line added here to take effect. A
+        // hand-maintained list already silently swallowed three detector
+        // settings once; this is the same shape of bug waiting to happen.
+        ...Object.fromEntries(Object.entries(this.cfg.receiver).filter(
+          ([k, v]) => v !== undefined && !k.startsWith('_') &&
+                      k !== 'passbandHz' && k !== 'outputSampleRate' &&
+                      k !== 'agcDecayMs'))
       });
     } catch (e) {
       log('ERROR', 'ch' + this.freqKHz + ' session construction failed: ' + e.message);
@@ -563,6 +572,13 @@ class ChannelWorker extends EventEmitter {
     }
 
     const durationSec = res.samples / sampleRate;
+    // Waterfall rows overlapping this capture, pre-roll included.
+    const wfFrom = Date.now() - (ev.durationSec * 1000) - 2000;
+    const wf = (ctx.sess && typeof ctx.sess.waterfallRows === 'function')
+      ? ctx.sess.waterfallRows(wfFrom, Date.now())
+      : null;
+    const thumb = renderFileWith(res.path, wf);
+
     const record = {
       freqKHz: this.freqKHz,
       site: ctx.key,
@@ -582,6 +598,13 @@ class ChannelWorker extends EventEmitter {
       preRollShortSec: Number(cap.preRollShortSec.toFixed(2)),
       peakModFraction: Number(ev.peakModFraction.toFixed(4)),
       meanModFraction: Number(ev.meanModFraction.toFixed(4)),
+      // What the GATE tested, so a row can be compared directly against
+      // minVoicedFraction. The whole-file figure in `features` is a
+      // different quantity and reads much lower.
+      voicedAtTrigger: ev.voicedAtTrigger != null
+        ? Number(ev.voicedAtTrigger.toFixed(4)) : null,
+      peakVoicedFraction: ev.peakVoicedFraction != null
+        ? Number(ev.peakVoicedFraction.toFixed(4)) : null,
       floorAtTrigger: Number(ev.floorAtTrigger.toFixed(4)),
       thresholdAtTrigger: Number(ev.thresholdAtTrigger.toFixed(4)),
       closeReason: ev.reason,
@@ -589,7 +612,12 @@ class ChannelWorker extends EventEmitter {
       // Full feature vector for offline threshold fitting. modFraction is
       // retained but is known NOT to separate on real HF: measured static
       // reaches 0.703 against a real EAM's 0.712.
-      features: this._featuresOf(res.path, sampleRate)
+      features: this._featuresOf(res.path, sampleRate),
+      // Waterfall thumbnail. Prefer real RF spectrum from the receiver's W/F
+      // socket -- typically 29 kHz across, so the signal sits in context -- and
+      // fall back to an audio spectrogram, which can never exceed 6 kHz.
+      thumb: thumb ? thumb.file : null,
+      thumbSource: thumb ? thumb.source : null
     };
 
     this.pendingWrites++;
@@ -775,18 +803,28 @@ function buildConfig(raw) {
     propagationGate: Object.assign(
       { enabled: true, minScore: 0.35, recheckMinutes: 15 }, raw.propagationGate),
     identification: Object.assign({ kiwiIdentUser: 'hfgcs-recorder' }, raw.identification),
-    detector: {
-      fftSize: d.frameSamples, hop: d.hopSamples,
-      voiceBandHz: d.voiceBandHz, modBandHz: d.modBandHz,
-      flatnessRejectBelow: d.flatnessRejectBelow,
-      modFractionAbsMin: d.modFractionAbsMin,
-      modFractionRatioOverFloor: d.modFractionRatioOverFloor,
-      floorPercentile: d.floorPercentile,
-      floorWindowMinutes: d.floorWindowMinutes,
-      hangoverSeconds: d.hangoverSeconds,
-      minEventSeconds: d.minEventSeconds,
-      maxEventSeconds: d.maxEventSeconds
-    },
+    // Forward EVERY detector key, not a hand-maintained list.
+    //
+    // This was a whitelist of 11 names. Three settings added later --
+    // minVoicedFraction, harmVoicedThreshold, trailingSeconds -- were read from
+    // the config, shown in the settings page, and saved correctly, then
+    // silently dropped here. The detector kept its code defaults and the
+    // operator's setting did nothing at all, across several restarts, with no
+    // error anywhere.
+    //
+    // A whitelist that must be updated whenever a setting is added will
+    // eventually not be. Only the two deliberate renames are special-cased;
+    // everything else passes through, and undefined values are omitted so they
+    // cannot clobber a default.
+    detector: (() => {
+      const RENAMED = { frameSamples: 'fftSize', hopSamples: 'hop' };
+      const out = {};
+      for (const [k, v] of Object.entries(d)) {
+        if (k.startsWith('_') || v === undefined) continue;
+        out[RENAMED[k] || k] = v;
+      }
+      return out;
+    })(),
     output: Object.assign({ codec: 'wav', bitrateKbps: 24 }, raw.output),
     siteSelection: raw.siteSelection || {}
   };

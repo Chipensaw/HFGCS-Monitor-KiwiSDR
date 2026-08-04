@@ -63,7 +63,7 @@ function parseArgs(argv) {
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const FILE_RE = /^[A-Za-z0-9._-]+\.(wav|opus)$/;
+const FILE_RE = /^[A-Za-z0-9._-]+\.(wav|opus|png)$/;
 
 /**
  * Existence check with a short cache. The page polls every 5s and a day of
@@ -126,7 +126,9 @@ function serveAudio(req, res, eventsRoot) {
   try { st = fs.statSync(full); } catch (_) { res.writeHead(404); return res.end('not found'); }
   if (!st.isFile()) { res.writeHead(404); return res.end('not found'); }
 
-  const type = file.endsWith('.opus') ? 'audio/ogg' : 'audio/wav';
+  const type = file.endsWith('.opus') ? 'audio/ogg'
+             : file.endsWith('.png') ? 'image/png'
+             : 'audio/wav';
   const range = req.headers.range;
 
   if (range) {
@@ -154,7 +156,13 @@ function serveAudio(req, res, eventsRoot) {
   res.writeHead(200, {
     'Content-Type': type,
     'Content-Length': st.size,
-    'Accept-Ranges': 'bytes'
+    'Accept-Ranges': 'bytes',
+    // Audio never changes once written, but a THUMBNAIL can be re-rendered when
+    // the renderer improves. With no cache header at all the browser applies
+    // heuristic caching and keeps serving the old image, which looks exactly
+    // like the new renderer having done nothing.
+    'Cache-Control': file.endsWith('.png') ? 'no-cache' : 'public, max-age=86400',
+    'ETag': '"' + Math.round(st.mtimeMs).toString(36) + '-' + st.size.toString(36) + '"'
   });
   fs.createReadStream(full).pipe(res);
 }
@@ -224,6 +232,8 @@ function page() {
  .lbtn.on.data{background:#58a6ff;border-color:#58a6ff}
  .lbtn.on.unsure{background:#d29922;border-color:#d29922}
  tr.sel{background:#161b22}
+ .thumb{display:block;width:360px;height:auto;max-height:144px;border-radius:4px;
+        border:1px solid var(--line);background:#0d1117}
  .sig-strong{color:#3fb950;font-weight:600}
  .sig-mid{color:#d29922}
  .sig-weak{color:#6e7681}
@@ -250,7 +260,8 @@ function page() {
   </div>
   <table>
     <thead><tr><th></th><th>UTC</th><th>kHz</th><th>dur</th>
-    <th title="fraction of the window that was voiced - this is what the gate decides on">voiced</th>
+    <th title="waterfall: time left-to-right, frequency low-to-high">signal</th>
+    <th title="peak of the rolling window at trigger - directly comparable to the Minimum voiced fraction setting">voiced</th>
     <th title="peak autocorrelation in the 70-300 Hz pitch range">harm</th>
     <th title="how often the spectrum went peaky">dip</th>
     <th>receiver</th><th>listen</th><th>label</th></tr></thead>
@@ -380,10 +391,25 @@ async function tick(){
       const harmCls = hv==null ? '' : hv>=0.50 ? 'sig-strong' : hv>=0.35 ? 'sig-mid' : 'sig-weak';
       const harm = hv==null ? '--' : '<span class="'+harmCls+'">'+hv.toFixed(2)+'</span>';
 
+      // Show the value the GATE tested, not the whole-file average. The two
+      // differ a lot -- one capture triggered at 21.5% and averaged 8.4% once
+      // pre-roll and pauses were folded in, which looked like a capture below
+      // the configured minimum when nothing was wrong.
+      // Older captures predate thumbnails; show a placeholder rather than a
+      // broken image.
+      const thumb = e.thumb
+        ? '<img class="thumb" loading="lazy" src="audio/'+encodeURIComponent(e.day)
+          +'/'+encodeURIComponent(e.thumb)+'?v='+encodeURIComponent(e.startedAt||'')+'" alt="waterfall">'
+        : '<span class="none">--</span>';
+
+      const vt = e.peakVoicedFraction != null ? e.peakVoicedFraction : e.voicedAtTrigger;
       const vf = f.harmonicVoicedFraction;
-      const vfCls = vf==null ? '' : vf>=0.15 ? 'sig-strong' : vf>=0.05 ? 'sig-mid' : 'sig-weak';
-      const voiced = vf==null ? '--'
-        : '<span class="'+vfCls+'" title="threshold 3%">'+(100*vf).toFixed(1)+'%</span>';
+      const shown = vt != null ? vt : vf;
+      const vfCls = shown==null ? '' : shown>=0.15 ? 'sig-strong' : shown>=0.05 ? 'sig-mid' : 'sig-weak';
+      const avgTxt = vf!=null ? ', whole-file avg '+(100*vf).toFixed(1)+'%' : '';
+      const voiced = shown==null ? '--'
+        : '<span class="'+vfCls+'" title="peak of the rolling window - this is what the threshold tests'
+          +avgTxt+'">'+(100*shown).toFixed(1)+'%</span>';
       const cur = (labelMap[e.id]||{}).label || '';
       const btns = LB.map(l=>'<button class="lbtn '+l+(cur===l?' on':'')+'" data-id="'+esc(e.id)
         +'" data-l="'+l+'">'+l+'</button>').join('');
@@ -393,6 +419,7 @@ async function tick(){
         +'<td>'+esc((e.startedAt||'').replace('T',' ').slice(0,19))+'</td>'
         +'<td>'+esc(e.freqKHz)+'</td>'
         +'<td>'+(e.durationSec!=null?e.durationSec.toFixed(1)+'s':'--')+'</td>'
+        +'<td>'+thumb+'</td>'
         +'<td>'+voiced+'</td><td>'+harm+'</td><td>'+dip+'</td>'
         +'<td>'+esc(e.site)+'</td>'
         +'<td><audio controls preload="none" src="audio/'+encodeURIComponent(e.day)+'/'+encodeURIComponent(e.file)+'"></audio></td>'

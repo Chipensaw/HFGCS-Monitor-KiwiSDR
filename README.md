@@ -42,7 +42,8 @@ instructive thing in the repo.
 scheduler/select.js    pick a receiver: filter (etiquette) then rank
         |              (slots>=4, non-proxied, band coverage, not blocklisted,
         v               solar geometry, survey quality, region preference)
-recorder/kiwi-audio-client.js   one SND WebSocket per channel, 12 kHz PCM
+recorder/kiwi-audio-client.js   SND socket: 12 kHz PCM
+        |                       W/F socket: ~29 kHz of RF spectrum
         |
 recorder/ring-buffer.js         60 s ring, PRE-ROLL ONLY
         |
@@ -50,13 +51,33 @@ detector/features.js -> voice-detector.js
         |
 recorder/encoder.js             streams to WAV from the moment of trigger
         |
-data/events/<day>/              clip + events.jsonl with full feature vector
+recorder/spectrogram.js         waterfall thumbnail, RF preferred
         |
-monitor/server.js               page, labelling, delete, settings
+data/events/<day>/              clip + png + events.jsonl with feature vector
+        |
+monitor/server.js               operator page (auth): labelling, delete, settings
+monitor/public.js               public page: captures, audio, map
 ```
 
 One Node process, one worker per active frequency. Receivers rotate underneath
 a worker; the worker owns the frequency.
+
+## Waterfall thumbnails
+
+Every capture gets a spectrogram beside it, because speech, data bursts and
+carriers look completely different in a waterfall and nearly identical in a
+table of numbers.
+
+Where the receiver's waterfall socket is available, these show **real RF
+spectrum, about 29 kHz wide**, so a 3 kHz transmission appears as a narrow band
+in context -- and it becomes obvious when a detection is actually a strong
+neighbour bleeding into the passband. Otherwise the thumbnail falls back to an
+audio spectrogram, which can never exceed 6 kHz. Each record notes which was
+used in `thumbSource`.
+
+The waterfall costs a second socket and about 5 KB/s of a volunteer's
+bandwidth. See [ETIQUETTE.md](ETIQUETTE.md), and set
+`receiver.openWaterfall: false` to turn it off.
 
 ## Install
 
@@ -92,9 +113,20 @@ editable on the web page. **Changes take effect on the next recorder start.**
 Enable/disable is deliberately NOT on the page. It is the authorisation to
 contact other people's receivers and stays a shell act.
 
+## Public view
+
+`monitor/public.js` serves a read-only page: captures, audio, thumbnails, and a
+world map showing receiver positions, the 13 HFGCS ground stations, which are
+scheduled on air at the current hour, and the great-circle paths between them.
+
+It is a separate process from the operator interface, not the same page with
+controls hidden. The operator monitor holds a sudo grant; exposing any part of it
+publicly would put that one routing mistake away from a stranger. The public
+process has no sudo, no write paths, and answers only GET and HEAD. Receiver
+endpoints are never published and coordinates are rounded to about 11 km.
+
 ## Status
 
-Working and running. Not finished. The largest gap is that the **UDXF
-ground-station schedule is not transcribed**, so site selection cannot compute
-a path midpoint and falls back to solar geometry plus a region preference. See
-[HANDOFF.md](HANDOFF.md) for the full open-work list.
+Working and running. Not finished. See [HANDOFF.md](HANDOFF.md) for the open-work
+list, and [docs/detector-calibration.md](docs/detector-calibration.md) for what
+the detector thresholds do and do not rest on.

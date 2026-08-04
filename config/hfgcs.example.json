@@ -50,7 +50,9 @@
       300,
       2800
     ],
-    "_verifyBeforePhase1": "exact kiwirecorder/kiwi-client AGC parameter names and units are NOT yet confirmed against the client source"
+    "_verifyBeforePhase1": "exact kiwirecorder/kiwi-client AGC parameter names and units are NOT yet confirmed against the client source",
+    "openWaterfall": true,
+    "_wfNote": "Opens a second WebSocket per session for RF spectrum. Costs NO extra rx channel (one session id serves both sockets) but ~1 KB/s of bandwidth. Gives thumbnails ~29 kHz wide instead of the 6 kHz ceiling of demodulated audio."
   },
   "session": {
     "_note": "One slot on one receiver per frequency, released and reselected on a cap. Smaller footprint than a human who parks on 11175 all evening.",
@@ -110,11 +112,14 @@
     "_harmonicityNote": "Never use as a primary discriminator. See flatnessNote.",
     "energyUse": "disabled",
     "_energyNote": "Level arrives flat through receiver AGC; frame energy carried no usable information across the entire reference recording.",
-    "hangoverSeconds": 10,
+    "hangoverSeconds": 15,
     "minEventSeconds": 4,
     "maxEventSeconds": 600,
     "expectedSnrFloorDb": 0,
-    "_snrNote": "Feature separation held to roughly 0 dB SNR even through a deliberately hostile 0.1 s AGC. Unmeasured with correct AGC settings."
+    "_snrNote": "Feature separation held to roughly 0 dB SNR even through a deliberately hostile 0.1 s AGC. Unmeasured with correct AGC settings.",
+    "minVoicedFraction": 0.15,
+    "harmVoicedThreshold": 0.4,
+    "trailingSeconds": 1
   },
   "propagationGate": {
     "_note": "Whether a frequency is worth a KiwiSDR slot right now. Holding 4724 kHz through local noon consumes a volunteer's receiver to listen to a dead band. When no eligible receiver has a plausibly open path the worker RELEASES its slot and sleeps. 24H frequencies (8992, 11175) score flat and never gate closed. minScore 0.35 opens the night bands below +3.5deg solar elevation and the day band above -3.5deg, so grayline is included on both sides.",
@@ -150,7 +155,7 @@
     "maxTotalMB": 8192
   },
   "identification": {
-    "_note": "kiwiIdentUser shows in the receiver user list. userAgent is sent as the HTTP User-Agent on the WebSocket upgrade and links back to this repository.",
+    "_note": "Identify the project to sysops. Cheap, and the difference between a tool people tolerate and one they block.",
     "userAgent": "HFGCS-Monitor-KiwiSDR/0.1 (+https://github.com/Chipensaw/HFGCS-Monitor-KiwiSDR)",
     "kiwiIdentUser": "YOURCALL-HFGCS"
   },
