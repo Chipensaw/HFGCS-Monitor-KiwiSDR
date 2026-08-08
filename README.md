@@ -38,6 +38,10 @@ instructive thing in the repo.
 
 ## Architecture
 
+Full detail in **[docs/system-architecture.md](docs/system-architecture.md)** --
+the three-process topology, config contract, session model and data ownership.
+Sketch below.
+
 ```
 scheduler/select.js    pick a receiver: filter (etiquette) then rank
         |              (slots>=4, non-proxied, band coverage, not blocklisted,
