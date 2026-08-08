@@ -101,8 +101,10 @@ different problems with different remedies and both return a score of zero.
    lost a channel to a New Zealand receiver with a better instantaneous path.
 3. **The cohort has a region literally named `Other`.** Not in the validation
    list, so those receivers are unreachable whenever any preference is set.
-4. **Retention does not prune `data/trash`.** It only walks `data/events`.
-   Trash grows without bound. Files are safe; the disk is not, eventually.
+4. ~~Retention does not prune `data/trash`.~~ **RESOLVED 2026-08-08.** The
+   holding folder is gone and deletion is permanent. It was never reachable from
+   the page, retention never pruned it, and it had reached 521 files / 481 MB.
+   `delete-log.jsonl` still records what was removed and by whom.
 5. **No direct contact route is published.** By design: a scrapeable address in
    a public repo attracts spam, and a sysop who does not want to participate can
    simply block. Identification is still sent both ways -- `ident_user` in the
@@ -137,8 +139,8 @@ different problems with different remedies and both return a score of zero.
 
 ## Open work, in priority order
 
-1. Listen to the two `moxley.us` captures named in the calibration doc.
-   Cheapest possible improvement to the threshold.
+1. ~~Listen to the two `moxley.us` captures.~~ **MOOT** -- deleted 2026-08-08.
+   Rebuilding a labelled set means fresh captures transcribed by ear.
 2. Use `scheduler/stations.json` in site selection: path midpoint per frequency
    per hour, rather than solar geometry alone. Transcribe the winter table.
 3. Retention for `data/trash` -- age and size cap, same as events.
@@ -176,6 +178,11 @@ different problems with different remedies and both return a score of zero.
 - **Transfer by heredoc or in-place patch, never hand-copied base64.**
 - **`pick()` draws randomly from the top N.** Tests that assume an ordering are
   flaky. Test the invariant, not the draw.
+- **A safety net nobody can reach is not a safety net.** Soft-delete moved
+  captures to `data/trash/`, which no page could read, no route served and
+  retention never pruned. It grew to 481 MB while the confirmation dialog kept
+  promising the files were recoverable. Either wire the recovery path or delete
+  outright; the half-measure cost disk and told users something untrue.
 - **Never read values back out of a rendered image.** Decoding the jet palette
   to check a spectrogram produced FOUR wrong conclusions in one session: deep
   blue `(0,0,128)` read as maximum brightness twice, cyan reported as red, and a

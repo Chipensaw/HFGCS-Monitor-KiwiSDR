@@ -121,6 +121,7 @@ function page() {
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HFGCS Monitor</title>
+<link rel="stylesheet" href="/leaflet.min.css">
 <style>
  :root{--bg:#0d1117;--fg:#c9d1d9;--dim:#8b949e;--line:#21262d;--accent:#58a6ff}
  *{box-sizing:border-box}
@@ -132,14 +133,13 @@ function page() {
  a{color:var(--accent)}
  .wrap{padding:20px;max-width:1200px}
  h2{font-size:13px;color:var(--accent);margin:26px 0 8px;font-weight:600}
- svg.map{width:100%;height:auto;background:#0b1622;border:1px solid var(--line);border-radius:6px}
- .grat{stroke:#182534;stroke-width:.5;fill:none}
- .term{fill:#000;opacity:.28}
- .path{stroke:#2f6f4f;stroke-width:.7;fill:none;opacity:.55}
- .stn{fill:#d29922}
- .stn.off{fill:#39414d}
- .rx{fill:#58a6ff}
- .lbl{fill:#6e7681;font:3.4px ui-monospace,monospace}
+ #map{width:100%;height:460px;background:#0b1622;border:1px solid var(--line);border-radius:6px}
+ .leaflet-control-attribution{background:rgba(13,17,23,.8)!important;color:var(--dim)!important;font-size:10px!important}
+ .leaflet-control-attribution a{color:var(--accent)!important}
+ .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#161b22;color:var(--fg);border:1px solid var(--line)}
+ .leaflet-popup-content{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:10px 12px}
+ .leaflet-popup-content b{color:var(--accent)}
+ .leaflet-container a.leaflet-popup-close-button{color:var(--dim)}
  table{width:100%;border-collapse:collapse;margin-top:6px}
  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:middle}
  th{color:var(--dim);font-weight:500}
@@ -158,14 +158,13 @@ function page() {
   <div class="sub">
     Automatic recordings of USAF High Frequency Global Communications System voice
     transmissions, captured through volunteer-run <a href="http://kiwisdr.com/">KiwiSDR</a>
-    receivers around the world. Detection is automatic and imperfect &mdash; some of
-    what is below is static.
+    receivers around the world.
   </div>
 </header>
 <div class="wrap">
 
   <h2>Receivers and ground stations</h2>
-  <svg class="map" id="map" viewBox="0 0 360 180" preserveAspectRatio="xMidYMid meet"></svg>
+  <div id="map"></div>
   <div class="legend">
     <span class="dot" style="background:#d29922"></span>ground station, scheduled on air now &nbsp;
     <span class="dot" style="background:#39414d"></span>ground station, off schedule &nbsp;
@@ -192,56 +191,68 @@ function page() {
   transmissions.
 </footer>
 
+<script src="/leaflet.min.js"></script>
+<script src="/L.Terminator.js"></script>
 <script>
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const X = lon => (lon + 180);
-const Y = lat => (90 - lat);
+var map=null, stationLayer=null, rxLayer=null, pathLayer=null, terminatorLayer=null;
 
-function greatCircle(a, b, n){
-  const rad = Math.PI/180, dg = 180/Math.PI;
-  const p1 = [a.lat*rad, a.lon*rad], p2 = [b.lat*rad, b.lon*rad];
-  const d = 2*Math.asin(Math.sqrt(Math.pow(Math.sin((p1[0]-p2[0])/2),2)
-        + Math.cos(p1[0])*Math.cos(p2[0])*Math.pow(Math.sin((p1[1]-p2[1])/2),2)));
-  if(!d) return [];
-  const pts=[];
-  for(let i=0;i<=n;i++){
-    const f=i/n;
-    const A=Math.sin((1-f)*d)/Math.sin(d), B=Math.sin(f*d)/Math.sin(d);
-    const x=A*Math.cos(p1[0])*Math.cos(p1[1])+B*Math.cos(p2[0])*Math.cos(p2[1]);
-    const y=A*Math.cos(p1[0])*Math.sin(p1[1])+B*Math.cos(p2[0])*Math.sin(p2[1]);
-    const z=A*Math.sin(p1[0])+B*Math.sin(p2[0]);
-    pts.push([Math.atan2(z,Math.sqrt(x*x+y*y))*dg, Math.atan2(y,x)*dg]);
+// Reused verbatim from wspr-map.html so both maps draw arcs identically.
+function greatCircle(lat1, lon1, lat2, lon2, n) {
+  n = n || 64;
+  var toRad = Math.PI/180, toDeg = 180/Math.PI;
+  var phi1=lat1*toRad, lam1=lon1*toRad, phi2=lat2*toRad, lam2=lon2*toRad;
+  var dphi=phi2-phi1, dlam=lam2-lam1;
+  var a = Math.sin(dphi/2)*Math.sin(dphi/2) +
+          Math.cos(phi1)*Math.cos(phi2)*Math.sin(dlam/2)*Math.sin(dlam/2);
+  var d = 2*Math.asin(Math.min(1, Math.sqrt(a)));
+  if (d === 0) return [[lat1, lon1]];
+  var pts = [];
+  for (var i2 = 0; i2 <= n; i2++) {
+    var f=i2/n, A2=Math.sin((1-f)*d)/Math.sin(d), B2=Math.sin(f*d)/Math.sin(d);
+    var x=A2*Math.cos(phi1)*Math.cos(lam1)+B2*Math.cos(phi2)*Math.cos(lam2);
+    var y=A2*Math.cos(phi1)*Math.sin(lam1)+B2*Math.cos(phi2)*Math.sin(lam2);
+    var z=A2*Math.sin(phi1)+B2*Math.sin(phi2);
+    pts.push([Math.atan2(z, Math.sqrt(x*x+y*y))*toDeg, Math.atan2(y, x)*toDeg]);
   }
   return pts;
 }
 
-// Solar declination and the subsolar longitude, for the night shading.
-function subsolar(now){
-  const d = now/86400000 + 2440587.5 - 2451545.0;
-  const g = ((357.528 + 0.9856003*d) % 360) * Math.PI/180;
-  const L = (280.460 + 0.9856474*d) % 360;
-  const lam = (L + 1.915*Math.sin(g) + 0.020*Math.sin(2*g)) * Math.PI/180;
-  const eps = 23.439 * Math.PI/180;
-  const dec = Math.asin(Math.sin(eps)*Math.sin(lam)) * 180/Math.PI;
-  let gmst = (18.697374558 + 24.06570982441908*d) % 24;
-  if(gmst<0) gmst+=24;
-  return { dec, lon: -(gmst*15) % 360 };
+function splitArc(pts) {
+  var segments=[], current=[pts[0]];
+  for (var i2=1; i2<pts.length; i2++) {
+    if (Math.abs(pts[i2][1]-pts[i2-1][1]) > 180) { segments.push(current); current=[pts[i2]]; }
+    else current.push(pts[i2]);
+  }
+  if (current.length > 1) segments.push(current);
+  return segments;
 }
 
-function nightPath(now){
-  const s = subsolar(now);
-  const rad=Math.PI/180;
-  const pts=[];
-  for(let lon=-180; lon<=180; lon+=2){
-    // terminator latitude for this longitude
-    const h=(lon - s.lon)*rad;
-    const lat = Math.atan(-Math.cos(h)/Math.tan(s.dec*rad || 1e-6))/rad;
-    pts.push([lon, lat]);
+function initMap() {
+  map = L.map('map', {
+    center: [25, -40], zoom: 2,
+    worldCopyJump: true, zoomControl: true,
+    attributionControl: true, preferCanvas: true
+  });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OSM &copy; CARTO',
+    subdomains: 'abcd', maxZoom: 10, minZoom: 1
+  }).addTo(map);
+
+  // Grayline in its own low pane, beneath paths and markers, non-interactive.
+  map.createPane('grayline');
+  map.getPane('grayline').style.zIndex = 250;
+  map.getPane('grayline').style.pointerEvents = 'none';
+  if (typeof L.terminator === 'function') {
+    terminatorLayer = L.terminator({
+      renderer: L.canvas({ pane: 'grayline' }), interactive: false,
+      color: '#fcd34d', weight: 1, opacity: 0.35,
+      fillColor: '#0a1020', fillOpacity: 0.32, resolution: 2
+    }).addTo(map);
   }
-  const top = s.dec > 0 ? -90 : 90;
-  let d='M '+pts.map(p=>X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join(' L ');
-  d += ' L '+X(180)+' '+Y(top)+' L '+X(-180)+' '+Y(top)+' Z';
-  return d;
+  pathLayer = L.layerGroup().addTo(map);
+  stationLayer = L.layerGroup().addTo(map);
+  rxLayer = L.layerGroup().addTo(map);
 }
 
 function schedActive(spec, hour){
@@ -253,48 +264,42 @@ function schedActive(spec, hour){
 async function draw(){
   let d;
   try{ d = await fetch('api/public').then(r=>r.json()); }catch(e){ return; }
-  const now = Date.now();
-  const hour = new Date(now).getUTCHours();
-  const svg = document.getElementById('map');
-  let out = '';
+  const hour = new Date().getUTCHours();
 
-  out += '<path class="term" d="'+nightPath(now)+'"/>';
-  for(let lat=-60; lat<=60; lat+=30) out += '<line class="grat" x1="0" y1="'+Y(lat)+'" x2="360" y2="'+Y(lat)+'"/>';
-  for(let lon=-120; lon<=120; lon+=60) out += '<line class="grat" x1="'+X(lon)+'" y1="0" x2="'+X(lon)+'" y2="180"/>';
+  if(!map) initMap();
+  if(terminatorLayer && terminatorLayer.setTime) terminatorLayer.setTime(new Date());
+  pathLayer.clearLayers(); stationLayer.clearLayers(); rxLayer.clearLayers();
 
-  // receiver -> station paths, for the frequencies that actually produced captures
   const rx = d.receivers||[];
   const stations = d.stations||[];
-  for(const r of rx){
-    for(const st of stations){
-      const spec = st.schedule[String(r.freqKHz)];
-      if(!spec || !schedActive(spec, hour)) continue;
-      const pts = greatCircle(r, st, 48);
-      if(!pts.length) continue;
-      // split where the path crosses the antimeridian
-      let seg=[], segs=[];
-      let prev=null;
-      for(const p of pts){
-        if(prev!==null && Math.abs(p[1]-prev)>180){ segs.push(seg); seg=[]; }
-        seg.push(p); prev=p[1];
-      }
-      segs.push(seg);
-      for(const s of segs){
-        if(s.length<2) continue;
-        out += '<path class="path" d="M '+s.map(p=>X(p[1]).toFixed(1)+' '+Y(p[0]).toFixed(1)).join(' L ')+'"/>';
-      }
-    }
-  }
 
-  for(const st of stations){
-    const anyOn = Object.values(st.schedule).some(v=>schedActive(v,hour));
-    out += '<circle class="stn'+(anyOn?'':' off')+'" cx="'+X(st.lon)+'" cy="'+Y(st.lat)+'" r="1.6"/>';
-    out += '<text class="lbl" x="'+(X(st.lon)+2.4)+'" y="'+(Y(st.lat)+1.2)+'">'+esc(st.name)+'</text>';
-  }
-  for(const r of rx){
-    out += '<circle class="rx" cx="'+X(r.lon)+'" cy="'+Y(r.lat)+'" r="1.3"/>';
-  }
-  svg.innerHTML = out;
+  // Paths first so markers sit on top of them.
+  rx.forEach(function(r){
+    stations.forEach(function(st){
+      const spec = st.schedule[String(r.freqKHz)];
+      if(!spec || !schedActive(spec, hour)) return;
+      splitArc(greatCircle(r.lat, r.lon, st.lat, st.lon, 64)).forEach(function(seg){
+        if(seg.length < 2) return;
+        L.polyline(seg, {color:'#2f6f4f', weight:1, opacity:0.5, interactive:false}).addTo(pathLayer);
+      });
+    });
+  });
+
+  stations.forEach(function(st){
+    const live = Object.keys(st.schedule).filter(function(k){ return schedActive(st.schedule[k], hour); });
+    const on = live.length > 0;
+    L.circleMarker([st.lat, st.lon], {
+      radius:5, color: on?'#d29922':'#39414d', fillColor: on?'#d29922':'#39414d',
+      fillOpacity:0.85, weight:1
+    }).bindPopup('<b>'+esc(st.name)+'</b><br>'+esc(st.site||'')+
+      '<br>on air now: '+(on ? esc(live.join(', '))+' kHz' : 'none')).addTo(stationLayer);
+  });
+
+  rx.forEach(function(r){
+    L.circleMarker([r.lat, r.lon], {
+      radius:4, color:'#58a6ff', fillColor:'#58a6ff', fillOpacity:0.9, weight:1
+    }).bindPopup('receiver &middot; '+esc(r.freqKHz)+' kHz<br>position rounded to ~11 km').addTo(rxLayer);
+  });
 
   document.getElementById('mapnote').textContent =
     stations.length+' ground stations, '+rx.length+' receiver location(s) with captures. '
@@ -323,7 +328,10 @@ function createServer(dataRoot, opts) {
   opts = opts || {};
   const eventsRoot = path.join(dataRoot, 'events');
   const stationsFile = opts.stationsFile || path.join(__dirname, '..', 'scheduler', 'stations.json');
-  const limit = opts.limit || 100;
+  // Newest N only. This limits what the PAGE SHOWS -- it does not delete
+  // anything. Older captures stay on disk and are pruned by retention on age
+  // and total size, which is the mechanism that actually reclaims space.
+  const limit = opts.limit || 10;
 
   return http.createServer((req, res) => {
     const url = req.url.split('?')[0];

@@ -88,6 +88,17 @@ the detector used to live in. `kiwi-audio-client.js` throws on any value below
 - **Data-mode rejection.** Known to fail on at least one structured non-voice
   signal.
 
+## THE SOURCE AUDIO NO LONGER EXISTS
+
+Every measurement below was taken from captures that have since been deleted
+(2026-08-08, deliberately -- the holding folder was unreachable and had grown to
+481 MB). The numbers stand as recorded history and the reasoning behind each
+threshold is still sound, but **none of it can be re-run**. Re-deriving any of
+these figures means collecting and hand-labelling a fresh set.
+
+The named files -- `ve7fsr`, `sdr.k1vl`, `kiwisdr.km3t`, the two `moxley.us`
+captures -- are referenced below for provenance only. They are gone.
+
 ## The mains-hum false positive
 
 A receiver with heavy powerline noise produced 11 false captures in one night.

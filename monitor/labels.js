@@ -16,10 +16,12 @@
 //
 // DELETION IS SOFT, ON PURPOSE
 // ----------------------------
-// Captures move to data/trash/<day>/ rather than being unlinked. These files
+// Deletion is PERMANENT: the capture and its thumbnail are unlinked.
 // are currently the only labelled data this project has, and a mis-click on
 // "select all" would be unrecoverable. The retention sweep already prunes by
-// age, so trash cleans itself up without anyone having to remember.
+// The old data/trash/ holding area was removed: nothing could read it, the
+// retention sweep did not prune it, and it silently grew to 481 MB. An
+// unreachable safety net is a disk leak wearing a safety net's clothes.
 
 const fs = require('fs');
 const path = require('path');
@@ -62,7 +64,7 @@ function putLabel(dataRoot, id, label, who) {
 }
 
 /**
- * Move captures to trash. Returns per-id outcome rather than failing the whole
+ * Delete captures permanently. Returns per-id outcome rather than failing the whole
  * batch on one bad entry -- a select-all delete should not be defeated by a
  * single already-removed file.
  */
@@ -81,10 +83,15 @@ function trashCaptures(dataRoot, items, who) {
       results.push({ day, file, ok: false, error: 'outside events tree' });
       continue;
     }
-    const dstDir = path.join(dataRoot, 'trash', day);
+    // PERMANENT. Deletion used to move the capture to data/trash, but nothing
+    // ever read that folder: it was unreachable from the page, retention did
+    // not prune it, and it grew to 521 files / 481 MB before anyone noticed.
+    // A safety net nobody can reach is not a safety net, it is a disk leak.
+    // The thumbnail goes with the audio, or it is orphaned.
     try {
-      fs.mkdirSync(dstDir, { recursive: true });
-      fs.renameSync(src, path.join(dstDir, file));
+      fs.unlinkSync(src);
+      const png = src.replace(/\.wav$/, '.png');
+      try { fs.unlinkSync(png); } catch (_) { /* thumbnail may not exist */ }
       results.push({ day, file, ok: true });
     } catch (e) {
       results.push({ day, file, ok: false, error: e.code || e.message });
@@ -92,9 +99,9 @@ function trashCaptures(dataRoot, items, who) {
   }
   const moved = results.filter((r) => r.ok).length;
   if (moved) {
-    fs.appendFileSync(path.join(dataRoot, 'trash-log.jsonl'),
+    fs.appendFileSync(path.join(dataRoot, 'delete-log.jsonl'),
       JSON.stringify({ at: new Date().toISOString(), by: who || 'unknown',
-                       moved, items: results.filter((r) => r.ok).map((r) => r.day + '/' + r.file) }) + '\n');
+                       deleted: moved, items: results.filter((r) => r.ok).map((r) => r.day + '/' + r.file) }) + '\n');
   }
   return { moved, results };
 }

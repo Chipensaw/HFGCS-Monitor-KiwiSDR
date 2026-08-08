@@ -119,6 +119,10 @@ contact other people's receivers and stays a shell act.
 world map showing receiver positions, the 13 HFGCS ground stations, which are
 scheduled on air at the current hour, and the great-circle paths between them.
 
+The map is Leaflet on CartoDB's dark OSM tiles, the same basemap the WSPR and
+HFDL maps use, with a live grayline. Ground stations are gold when scheduled on
+air at the current hour and grey when not.
+
 It is a separate process from the operator interface, not the same page with
 controls hidden. The operator monitor holds a sudo grant; exposing any part of it
 publicly would put that one routing mistake away from a stranger. The public

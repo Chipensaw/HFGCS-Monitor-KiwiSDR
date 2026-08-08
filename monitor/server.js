@@ -518,7 +518,7 @@ document.getElementById('selall').onchange=function(){
 document.getElementById('btrash').onclick=async function(){
   const items=picked().map(c=>({day:c.dataset.day,file:c.dataset.file}));
   if(!items.length) return;
-  if(!confirm('Move '+items.length+' capture(s) to trash?\\n\\nFiles move to data/trash/ and are pruned by the retention sweep. Not immediately unrecoverable.')) return;
+  if(!confirm('PERMANENTLY delete '+items.length+' capture(s)?\\n\\nThe audio and its waterfall are removed from disk. This CANNOT be undone.')) return;
   const m=document.getElementById('trashmsg');
   m.className='msg'; m.textContent='deleting...';
   try{
@@ -526,7 +526,7 @@ document.getElementById('btrash').onclick=async function(){
       headers:{'Content-Type':'application/json','X-HFGCS-Control':'1'},
       body:JSON.stringify({items})});
     const j=await r.json().catch(()=>({}));
-    if(r.ok){ m.className='msg ok'; m.textContent=j.moved+' moved to trash';
+    if(r.ok){ m.className='msg ok'; m.textContent=j.moved+' permanently deleted';
       document.getElementById('selall').checked=false;
       lastRowSig=null;                 // force a rebuild: rows really did change
       setTimeout(tick,400); }
@@ -809,7 +809,7 @@ function createServer(dataRoot, opts) {
 
   const handleTrash = (req, res) => readBody(req, res, 256 * 1024, (b) => {
     const r = labels.trashCaptures(dataRoot, b.items, clientIp(req));
-    console.log('[trash] ' + clientIp(req) + ' moved ' + r.moved + ' capture(s) to trash');
+    console.log('[delete] ' + clientIp(req) + ' permanently deleted ' + r.moved + ' capture(s)');
     sendJson(res, 200, Object.assign({ ok: true }, r));
   });
 
