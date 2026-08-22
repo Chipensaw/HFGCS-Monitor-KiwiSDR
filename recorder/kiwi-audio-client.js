@@ -512,7 +512,18 @@ class KiwiAudioSession extends EventEmitter {
     this.stats.wfFrames++;
     const bins = Buffer.allocUnsafe(WF_BINS);
     buf.copy(bins, 0, WF_HEADER_BYTES);
-    this.wfRows.push({ at: Date.now(), bins });
+    // The header names the view the receiver is CURRENTLY serving: start as a
+    // LE u32 @4, zoom @8. Keeping them lets a caller that MOVES the view match
+    // each row to the segment it actually belongs to. Measured on air
+    // 2026-08-22: two rows for the PREVIOUS segment still arrive after a
+    // SET zoom=/start=, so a ring that only knows "the current view" mislabels
+    // them -- silently, at a plausible level and the wrong frequency.
+    this.wfRows.push({
+      at: Date.now(),
+      zoom: buf.readUInt8(8),
+      start: buf.readUInt32LE(4),
+      bins
+    });
     if (this.wfRows.length > this.opts.wf.maxRows) this.wfRows.shift();
   }
 
@@ -527,6 +538,57 @@ class KiwiAudioSession extends EventEmitter {
       rowSpanHz: this.wfView.rowSpanHz,
       binHz: this.wfView.binHz,
       zoom: this.wfView.zoom,
+      freqKHz: this.freqKHz
+    };
+  }
+
+  /**
+   * Point the WATERFALL at an explicit view, mid-session.
+   *
+   * retune() moves the SND channel and leaves the W/F where it was; this is
+   * the other half, and they are deliberately separate. A sweeper walks
+   * segments without retuning the audio at all.
+   *
+   * Returns the resolved view, or null if the span has not arrived yet, the
+   * socket is not open, or the view cannot be resolved.
+   */
+  setWaterfallView(view) {
+    if (!this.span) return null;
+    if (!this.wf || this.wf.readyState !== WebSocket.OPEN) return null;
+    const zs = computeZoomStart(view, this.span, this.zoomCap);
+    if (!zs) return null;
+    this.wfView = zs;
+    this._sendWf('SET zoom=' + zs.zoom + ' start=' + zs.start);
+    return zs;
+  }
+
+  /**
+   * Rows belonging to ONE view, labelled with THAT view's geometry.
+   *
+   * waterfallRows() labels every row with whatever wfView is current, which is
+   * correct only for a session that never moves the view -- as the recorder
+   * does not. A caller that DOES move it must use this instead.
+   *
+   * The ring is deliberately NOT cleared on a view change. Rows carry their
+   * own zoom/start, so stale ones are excluded by identity rather than by a
+   * timer; and leaving them in place lets a sweeper count how many arrived
+   * late, which is the only cheap check that the header is tracking the view
+   * at all. Clearing would make that count always zero and hide a regression.
+   */
+  waterfallRowsForView(view, fromMs, toMs) {
+    if (!view || !this.wfRows.length) return null;
+    const from = fromMs === undefined ? -Infinity : fromMs;
+    const to = toMs === undefined ? Infinity : toMs;
+    const rows = this.wfRows.filter((r) =>
+      r.at >= from && r.at <= to && r.zoom === view.zoom && r.start === view.start);
+    if (!rows.length) return null;
+    return {
+      rows: rows.map((r) => r.bins),
+      segLowHz: view.segLowHz,
+      rowSpanHz: view.rowSpanHz,
+      binHz: view.binHz,
+      zoom: view.zoom,
+      start: view.start,
       freqKHz: this.freqKHz
     };
   }
