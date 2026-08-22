@@ -117,7 +117,7 @@
     "maxEventSeconds": 600,
     "expectedSnrFloorDb": 0,
     "_snrNote": "Feature separation held to roughly 0 dB SNR even through a deliberately hostile 0.1 s AGC. Unmeasured with correct AGC settings.",
-    "minVoicedFraction": 0.15,
+    "minVoicedFraction": 0.2,
     "harmVoicedThreshold": 0.4,
     "trailingSeconds": 1
   },
@@ -151,8 +151,8 @@
     "_note": "24 kbps mono is transparent for a 2.7 kHz SSB passband; about 10.8 MB per hour of captured audio."
   },
   "retention": {
-    "retentionDays": 90,
-    "maxTotalMB": 8192
+    "retentionDays": 30,
+    "maxTotalMB": 2048
   },
   "identification": {
     "_note": "Identify the project to sysops. Cheap, and the difference between a tool people tolerate and one they block.",

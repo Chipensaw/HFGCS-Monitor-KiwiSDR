@@ -61,5 +61,16 @@ if [ -n "$newest" ] && [ ! -f "$newest/COMPLETE" ]; then
     exit 1
 fi
 
+# --- notice: live config vs tracked example ---------------------------------
+# NOT a gate. The live config is gitignored (it carries kiwiIdentUser), so a
+# tuning change made on the box has no version history. This names the drift.
+# It only prints -- drift is worth knowing about, not worth refusing to record
+# over -- so it never changes the exit status.
+DRIFT=${HFGCS_DRIFT:-$(dirname "$0")/config-drift.py}
+EXAMPLE=${HFGCS_EXAMPLE:-$CONFIG_DIR/hfgcs.example.json}
+if [ -x "$DRIFT" ] && [ -f "$EXAMPLE" ] && [ -f "$CONFIG_DIR/hfgcs.json" ]; then
+    python3 "$DRIFT" "$CONFIG_DIR/hfgcs.json" "$EXAMPLE" || true
+fi
+
 echo "[preflight] OK: authorised, survey idle${newest:+, $(basename "$newest") complete}."
 exit 0
